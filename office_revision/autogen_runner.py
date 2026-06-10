@@ -1,0 +1,237 @@
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+
+from .config import ModelSettings, read_optional_text
+from .review_analysis import parse_review_decision
+from .workflow import (
+    ReviewContext,
+    RevisionPass,
+    RevisionRequest,
+    RevisionResult,
+    WriterContext,
+)
+
+
+WRITER_SYSTEM_MESSAGE = """你是严谨的中文办公文档写作助手。
+你的任务是根据用户提供的原文、修改要求、上一版草稿和 reviewer 给出的明确修改指令，生成可直接用于项目实施方案、申请书、论文或汇报材料的修改稿。
+要求：结构清晰、语气正式、避免编造事实；如缺少必要信息，用“需补充：...”标出。"""
+
+REVIEWER_SYSTEM_MESSAGE = """你是严谨的中文文档审查专家。
+你的任务是检查修改稿是否符合要求，指出事实风险、逻辑问题、遗漏项、格式问题，并给出下一轮可执行修改建议。
+请使用固定 Markdown 结构输出，并明确写出“是否继续修改：是/否”和“给 writer 的修改指令”。"""
+
+
+def _optional_imports() -> tuple[Any, Any]:
+    try:
+        from autogen_agentchat.agents import AssistantAgent
+        from autogen_ext.models.openai import OpenAIChatCompletionClient
+    except ImportError as exc:
+        raise RuntimeError(
+            "AutoGen packages are not installed. Install them with "
+            '`pip install -U "autogen-agentchat" "autogen-ext[openai]"`, '
+            "or run with --dry-run."
+        ) from exc
+    return AssistantAgent, OpenAIChatCompletionClient
+
+
+def _model_client_kwargs(settings: ModelSettings) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {"model": settings.model}
+    if settings.api_key:
+        kwargs["api_key"] = settings.api_key
+    if settings.base_url:
+        kwargs["base_url"] = settings.base_url
+    if settings.enable_search:
+        kwargs["extra_body"] = {"enable_search": True}
+    kwargs["model_info"] = {
+        "vision": settings.vision,
+        "function_calling": settings.function_calling,
+        "json_output": settings.json_output,
+        "family": settings.model_family,
+        "structured_output": settings.structured_output,
+    }
+    return kwargs
+
+
+def _model_client(model_class: Any, settings: ModelSettings) -> Any:
+    return model_class(**_model_client_kwargs(settings))
+
+
+def _message_content(task_result: Any) -> str:
+    messages = getattr(task_result, "messages", None)
+    if not messages:
+        return ""
+    content = getattr(messages[-1], "content", "")
+    return content if isinstance(content, str) else str(content)
+
+
+def _writer_prompt(context: WriterContext) -> str:
+    return f"""请执行第 {context.cycle_index} 轮文档修改。
+
+【修改要求】
+{context.requirements}
+
+【原文】
+{context.source_text}
+
+【上一轮给 writer 的明确修改指令】
+{context.previous_writer_instructions or "无，当前为首轮修改。"}
+
+【上一轮完整审查意见】
+{context.previous_review or "无，当前为首轮修改。"}
+
+【上一版草稿】
+{context.previous_draft or "无，当前为首轮修改。"}
+
+请输出完整修改稿。优先落实“上一轮给 writer 的明确修改指令”。"""
+
+
+def _reviewer_prompt(context: ReviewContext) -> str:
+    return f"""请执行第 {context.cycle_index} 轮文档审查。
+
+【修改要求】
+{context.requirements}
+
+【原文】
+{context.source_text}
+
+【当前修改稿】
+{context.draft}
+
+请严格按以下 Markdown 结构输出：
+
+一、总体结论
+是否继续修改：是/否
+总体评分：1-5
+结论说明：……
+
+二、修改要求落实情况
+1. 要求：……
+   状态：已落实/部分落实/未落实
+   说明：……
+
+三、主要问题
+1. 问题类型：事实风险/逻辑结构/语言风格/格式规范/遗漏内容
+   严重程度：高/中/低
+   问题描述：……
+   修改建议：……
+
+四、下一轮修改清单
+1. ……
+
+五、给 writer 的修改指令
+请用可直接交给 writer 执行的清单表达。
+
+判断规则：
+- 如果修改稿已经基本满足要求，只需要少量人工校对，则写“是否继续修改：否”。
+- 如果仍有明显遗漏、事实风险、结构问题或未满足修改要求，则写“是否继续修改：是”。
+- 不要重写全文，只输出审查意见。"""
+
+
+async def _run_autogen_revision_loop_async(
+    request: RevisionRequest,
+    *,
+    writer_settings: ModelSettings,
+    reviewer_settings: ModelSettings,
+    writer_prompt_path: str = "config/writer_system_prompt.md",
+    reviewer_prompt_path: str = "config/reviewer_system_prompt.md",
+):
+    AssistantAgent, OpenAIChatCompletionClient = _optional_imports()
+    writer_client = _model_client(OpenAIChatCompletionClient, writer_settings)
+    reviewer_client = _model_client(OpenAIChatCompletionClient, reviewer_settings)
+    writer_agent = AssistantAgent(
+        name="writer",
+        model_client=writer_client,
+        system_message=read_optional_text(writer_prompt_path, WRITER_SYSTEM_MESSAGE),
+    )
+    reviewer_agent = AssistantAgent(
+        name="reviewer",
+        model_client=reviewer_client,
+        system_message=read_optional_text(reviewer_prompt_path, REVIEWER_SYSTEM_MESSAGE),
+    )
+
+    async def write(context: WriterContext) -> str:
+        result = await writer_agent.run(task=_writer_prompt(context))
+        return _message_content(result)
+
+    async def review(context: ReviewContext) -> str:
+        result = await reviewer_agent.run(task=_reviewer_prompt(context))
+        return _message_content(result)
+
+    try:
+        return await _run_async_revision_loop(request, writer=write, reviewer=review)
+    finally:
+        await writer_client.close()
+        await reviewer_client.close()
+
+
+async def _run_async_revision_loop(request, *, writer, reviewer):
+    if request.cycles <= 0:
+        raise ValueError("cycles must be greater than 0")
+
+    passes = []
+    previous_draft = None
+    previous_review = None
+    previous_writer_instructions = None
+    for cycle_index in range(1, request.cycles + 1):
+        draft = await writer(
+            WriterContext(
+                source_text=request.source_text,
+                requirements=request.requirements,
+                cycle_index=cycle_index,
+                previous_draft=previous_draft,
+                previous_review=previous_review,
+                previous_writer_instructions=previous_writer_instructions,
+            )
+        )
+        review = await reviewer(
+            ReviewContext(
+                source_text=request.source_text,
+                requirements=request.requirements,
+                cycle_index=cycle_index,
+                draft=draft,
+            )
+        )
+        decision = parse_review_decision(review)
+        passes.append(
+            RevisionPass(
+                cycle_index=cycle_index,
+                draft=draft,
+                review=review,
+                review_continue=decision.continue_revision,
+                review_score=decision.score,
+                writer_instructions=decision.writer_instructions,
+            )
+        )
+        if decision.continue_revision is False:
+            return RevisionResult(
+                request=request,
+                passes=passes,
+                stopped_early=True,
+                stop_reason="reviewer_requested_stop",
+            )
+        previous_draft = draft
+        previous_review = review
+        previous_writer_instructions = decision.writer_instructions
+
+    return RevisionResult(request=request, passes=passes)
+
+
+def run_autogen_revision_loop(
+    request: RevisionRequest,
+    *,
+    writer_settings: ModelSettings,
+    reviewer_settings: ModelSettings,
+    writer_prompt_path: str = "config/writer_system_prompt.md",
+    reviewer_prompt_path: str = "config/reviewer_system_prompt.md",
+):
+    return asyncio.run(
+        _run_autogen_revision_loop_async(
+            request,
+            writer_settings=writer_settings,
+            reviewer_settings=reviewer_settings,
+            writer_prompt_path=writer_prompt_path,
+            reviewer_prompt_path=reviewer_prompt_path,
+        )
+    )
