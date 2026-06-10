@@ -173,6 +173,28 @@ outputs/autogen/latest
 - `review.md`：最终审查意见。
 - `run_log.json`：每一轮写作和审查记录。
 
+此外，还会保留每轮writer的输出和reviewer的审核结果:
+
+```text
+drafts/
+  round_01_draft.md
+  round_01_draft.docx
+  round_02_draft.md
+  round_02_draft.docx
+  ...
+
+reviews/
+  round_01_review.md
+  round_01_review.docx
+  round_02_review.md
+  round_02_review.docx
+  ...
+```
+
+`drafts/` 保存writer每轮的输出. `reviews/` 保存reviewer每轮的审核内容. 如果reviewer提前停止流程，只有已完成的轮次会被保存。
+
+因为 reviewer 可以写 `是否继续修改：否` 来提前停止，所以把最大轮数设高一些更灵活；它代表“最多 5 轮”，不是一定跑满 5 轮。
+
 ## 5. 常用自定义
 
 如果要改轮数：
@@ -227,7 +249,7 @@ config/reviewer_system_prompt.md
 ```powershell
 .\scripts\check_connections.ps1
 ```
-## 9. 输入文件上传和隐私
+## 8. 输入文件上传和隐私
 
 仓库只应上传模板示例，不应上传真实办公文档。
 
@@ -274,4 +296,3 @@ git commit -m "chore: ignore local input documents"
 .\scripts\run_real_docx.ps1
 ```
 
-因为 reviewer 可以写 `是否继续修改：否` 来提前停止，所以把最大轮数设高一些更灵活；它代表“最多 5 轮”，不是一定跑满 5 轮。

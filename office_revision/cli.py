@@ -83,6 +83,29 @@ def write_outputs(result: RevisionResult, output_dir: Path, source_path: Path | 
     )
     if source_path and source_path.suffix.lower() == ".docx":
         write_final_docx(result.final_text, output_dir / "final.docx", reference_path=source_path)
+    write_round_outputs(result, output_dir, source_path=source_path)
+
+
+def write_round_outputs(result: RevisionResult, output_dir: Path, source_path: Path | None = None) -> None:
+    drafts_dir = output_dir / "drafts"
+    reviews_dir = output_dir / "reviews"
+    drafts_dir.mkdir(parents=True, exist_ok=True)
+    reviews_dir.mkdir(parents=True, exist_ok=True)
+    write_docx = bool(source_path and source_path.suffix.lower() == ".docx")
+
+    for revision_pass in result.passes:
+        round_id = f"round_{revision_pass.cycle_index:02d}"
+        draft_md = drafts_dir / f"{round_id}_draft.md"
+        review_md = reviews_dir / f"{round_id}_review.md"
+        draft_md.write_text(revision_pass.draft, encoding="utf-8")
+        review_md.write_text(revision_pass.review, encoding="utf-8")
+        if write_docx:
+            write_final_docx(
+                revision_pass.draft,
+                drafts_dir / f"{round_id}_draft.docx",
+                reference_path=source_path,
+            )
+            write_final_docx(revision_pass.review, reviews_dir / f"{round_id}_review.docx")
 
 
 def default_output_dir(args) -> Path:

@@ -120,6 +120,46 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.source, "inputs/source.docx")
         self.assertEqual(args.requirements, "inputs/requirements.md")
 
+    def test_docx_source_writes_round_drafts_and_reviews(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.docx"
+            requirements = root / "requirements.md"
+            output = root / "output"
+            document = Document()
+            document.add_heading("Project Plan", level=1)
+            document.add_paragraph("Original draft.")
+            document.save(source)
+            requirements.write_text("Improve the plan.", encoding="utf-8")
+
+            exit_code = main(
+                [
+                    "--source",
+                    str(source),
+                    "--requirements",
+                    str(requirements),
+                    "--output-dir",
+                    str(output),
+                    "--cycles",
+                    "2",
+                    "--dry-run",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((output / "drafts" / "round_01_draft.md").exists())
+            self.assertTrue((output / "drafts" / "round_01_draft.docx").exists())
+            self.assertTrue((output / "drafts" / "round_02_draft.md").exists())
+            self.assertTrue((output / "drafts" / "round_02_draft.docx").exists())
+            self.assertTrue((output / "reviews" / "round_01_review.md").exists())
+            self.assertTrue((output / "reviews" / "round_01_review.docx").exists())
+            self.assertTrue((output / "reviews" / "round_02_review.md").exists())
+            self.assertTrue((output / "reviews" / "round_02_review.docx").exists())
+            draft_doc = Document(output / "drafts" / "round_01_draft.docx")
+            review_doc = Document(output / "reviews" / "round_01_review.docx")
+            self.assertTrue(any(paragraph.text for paragraph in draft_doc.paragraphs))
+            self.assertTrue(any(paragraph.text for paragraph in review_doc.paragraphs))
+
 
 if __name__ == "__main__":
     unittest.main()
