@@ -11,6 +11,7 @@ from typing import Sequence
 from .config import load_env_file, load_role_settings, merged_env_values
 from .document_io import read_source_text, write_final_docx
 from .dry_run import dry_run_reviewer, dry_run_writer
+from .summary import write_changes_summary
 from .workflow import RevisionRequest, RevisionResult, run_revision_loop
 
 
@@ -101,6 +102,7 @@ def write_outputs(result: RevisionResult, output_dir: Path, source_path: Path | 
     elif source_path.suffix.lower() == ".docx":
         write_final_docx(result.final_text, output_dir / "final.docx", reference_path=source_path)
     write_round_outputs(result, output_dir, source_path=source_path)
+    write_changes_summary(result, output_dir)
 
 
 def write_round_outputs(result: RevisionResult, output_dir: Path, source_path: Path | None = None) -> None:

@@ -168,8 +168,12 @@ outputs/autogen/latest
 final.docx
 final.md
 review.md
+changes_summary.docx
+changes_summary.md
 run_log.json
 ```
+
+`changes_summary` 是本次运行的修改说明汇总，包含运行概况、输入材料、每轮修改与审查摘要、最终结论，以及自动识别出的“需补充 / 需核实 / 待确认 / TODO”等人工处理事项。
 
 每轮结果：
 

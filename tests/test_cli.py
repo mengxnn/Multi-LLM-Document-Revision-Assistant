@@ -212,6 +212,8 @@ class CliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertTrue((output / "final.md").exists())
             self.assertTrue((output / "final.docx").exists())
+            self.assertTrue((output / "changes_summary.md").exists())
+            self.assertTrue((output / "changes_summary.docx").exists())
             run_log = json.loads((output / "run_log.json").read_text(encoding="utf-8"))
             self.assertFalse(run_log["has_source"])
             self.assertIsNone(run_log["source_path"])
