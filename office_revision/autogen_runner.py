@@ -15,11 +15,12 @@ from .workflow import (
 
 
 WRITER_SYSTEM_MESSAGE = """你是严谨的中文办公文档写作助手。
-你的任务是根据用户提供的原文、修改要求、上一版草稿和 reviewer 给出的明确修改指令，生成可直接用于项目实施方案、申请书、论文或汇报材料的修改稿。
-要求：结构清晰、语气正式、避免编造事实；如缺少必要信息，用“需补充：...”标出。"""
+你的任务是根据用户提供的修改要求、可选原文、可选会议纪要、上一版草稿和 reviewer 给出的明确修改指令，生成可直接用于项目实施方案、申请书、论文或汇报材料的修改稿。
+要求：结构清晰、语气正式、避免编造事实；如缺少必要信息，用“【需补充：...】”标出。
+如果用户没有提供原文，则根据修改要求和会议纪要从零起草。"""
 
 REVIEWER_SYSTEM_MESSAGE = """你是严谨的中文文档审查专家。
-你的任务是检查修改稿是否符合要求，指出事实风险、逻辑问题、遗漏项、格式问题，并给出下一轮可执行修改建议。
+你的任务是检查修改稿是否符合用户要求，并结合可选原文和可选会议纪要指出事实风险、逻辑问题、遗漏项、格式问题，给出下一轮可执行修改建议。
 请使用固定 Markdown 结构输出，并明确写出“是否继续修改：是/否”和“给 writer 的修改指令”。"""
 
 
@@ -66,25 +67,31 @@ def _message_content(task_result: Any) -> str:
     return content if isinstance(content, str) else str(content)
 
 
+def _optional_section(title: str, value: str, missing_text: str) -> str:
+    content = value.strip()
+    return f"【{title}】\n{content if content else missing_text}"
+
+
 def _writer_prompt(context: WriterContext) -> str:
-    return f"""请执行第 {context.cycle_index} 轮文档修改。
+    return f"""请执行第 {context.cycle_index} 轮文档写作或修改。
 
 【修改要求】
 {context.requirements}
 
-【原文】
-{context.source_text}
+{_optional_section("原文/初稿", context.source_text, "未提供原文或初稿，请从零起草。")}
+
+{_optional_section("会议纪要", context.meeting_notes, "未提供会议纪要。")}
 
 【上一轮给 writer 的明确修改指令】
-{context.previous_writer_instructions or "无，当前为首轮修改。"}
+{context.previous_writer_instructions or "无，当前为首轮。"}
 
 【上一轮完整审查意见】
-{context.previous_review or "无，当前为首轮修改。"}
+{context.previous_review or "无，当前为首轮。"}
 
 【上一版草稿】
-{context.previous_draft or "无，当前为首轮修改。"}
+{context.previous_draft or "无，当前为首轮。"}
 
-请输出完整修改稿。优先落实“上一轮给 writer 的明确修改指令”。"""
+请输出完整修改稿。优先落实“上一轮给 writer 的明确修改指令”。如果没有原文，请根据修改要求和会议纪要生成一版完整初稿。"""
 
 
 def _reviewer_prompt(context: ReviewContext) -> str:
@@ -93,8 +100,9 @@ def _reviewer_prompt(context: ReviewContext) -> str:
 【修改要求】
 {context.requirements}
 
-【原文】
-{context.source_text}
+{_optional_section("原文/初稿", context.source_text, "未提供原文或初稿，本轮应按从零起草场景审查。")}
+
+{_optional_section("会议纪要", context.meeting_notes, "未提供会议纪要。")}
 
 【当前修改稿】
 {context.draft}
@@ -179,6 +187,7 @@ async def _run_async_revision_loop(request, *, writer, reviewer):
             WriterContext(
                 source_text=request.source_text,
                 requirements=request.requirements,
+                meeting_notes=request.meeting_notes,
                 cycle_index=cycle_index,
                 previous_draft=previous_draft,
                 previous_review=previous_review,
@@ -189,6 +198,7 @@ async def _run_async_revision_loop(request, *, writer, reviewer):
             ReviewContext(
                 source_text=request.source_text,
                 requirements=request.requirements,
+                meeting_notes=request.meeting_notes,
                 cycle_index=cycle_index,
                 draft=draft,
             )

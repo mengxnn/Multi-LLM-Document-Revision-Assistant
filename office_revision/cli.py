@@ -14,19 +14,28 @@ from .dry_run import dry_run_reviewer, dry_run_writer
 from .workflow import RevisionRequest, RevisionResult, run_revision_loop
 
 
+DEFAULT_INPUT_DIR = Path("inputs")
+SOURCE_CANDIDATES = ("source.docx", "source.md", "source.txt")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run a multi-cycle office document revision workflow."
     )
     parser.add_argument(
         "--source",
-        default="inputs/source.docx",
-        help="Path to the source document. Defaults to inputs/source.docx.",
+        default=None,
+        help="Optional source document path. If omitted, inputs/source.docx/.md/.txt are tried.",
     )
     parser.add_argument(
         "--requirements",
-        default="inputs/requirements.md",
+        default=None,
         help="Path to the revision requirements text/Markdown file.",
+    )
+    parser.add_argument(
+        "--meeting-notes",
+        default=None,
+        help="Optional meeting notes text/Markdown file. Empty files are ignored.",
     )
     parser.add_argument(
         "--output-dir",
@@ -71,6 +80,10 @@ def result_to_dict(result: RevisionResult) -> dict:
         "actual_cycles": len(result.passes),
         "stopped_early": result.stopped_early,
         "stop_reason": result.stop_reason,
+        "source_path": result.request.source_path,
+        "meeting_notes_path": result.request.meeting_notes_path,
+        "has_source": bool(result.request.source_text.strip()),
+        "has_meeting_notes": bool(result.request.meeting_notes.strip()),
         "passes": [asdict(item) for item in result.passes],
     }
 
@@ -83,7 +96,9 @@ def write_outputs(result: RevisionResult, output_dir: Path, source_path: Path | 
         json.dumps(result_to_dict(result), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    if source_path and source_path.suffix.lower() == ".docx":
+    if source_path is None:
+        write_final_docx(result.final_text, output_dir / "final.docx")
+    elif source_path.suffix.lower() == ".docx":
         write_final_docx(result.final_text, output_dir / "final.docx", reference_path=source_path)
     write_round_outputs(result, output_dir, source_path=source_path)
 
@@ -135,6 +150,44 @@ def prepare_output_dir(output_dir: Path) -> bool:
     return True
 
 
+def resolve_requirements_path(path_arg: str | None) -> Path:
+    return Path(path_arg) if path_arg else DEFAULT_INPUT_DIR / "requirements.md"
+
+
+def resolve_source_path(path_arg: str | None) -> Path | None:
+    if path_arg:
+        path = Path(path_arg)
+        return path if path.exists() else None
+    for candidate in SOURCE_CANDIDATES:
+        path = DEFAULT_INPUT_DIR / candidate
+        if path.exists():
+            return path
+    return None
+
+
+def resolve_meeting_notes_path(path_arg: str | None) -> Path | None:
+    if path_arg:
+        path = Path(path_arg)
+        return path if path.exists() else None
+    path = DEFAULT_INPUT_DIR / "meeting_notes.md"
+    return path if path.exists() else None
+
+
+def read_optional_document_text(path: Path | None) -> str:
+    if path is None:
+        return ""
+    return read_source_text(path).strip()
+
+
+def read_required_text(path: Path, label: str) -> str:
+    if not path.exists():
+        raise SystemExit(f"{label} file not found: {path}")
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        raise SystemExit(f"{label} file is empty: {path}")
+    return text
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -164,16 +217,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"[{status}] {result.role} model={result.model}: {result.message}")
         return 0 if all(result.ok for result in results) else 1
 
-    source_path = Path(args.source)
-    requirements_path = Path(args.requirements)
-    source_text = read_source_text(source_path)
-    requirements = requirements_path.read_text(encoding="utf-8")
+    source_path = resolve_source_path(args.source)
+    requirements_path = resolve_requirements_path(args.requirements)
+    meeting_notes_path = resolve_meeting_notes_path(args.meeting_notes)
+    source_text = read_optional_document_text(source_path)
+    requirements = read_required_text(requirements_path, "requirements")
+    meeting_notes = read_optional_document_text(meeting_notes_path)
 
     request = RevisionRequest(
         source_text=source_text,
         requirements=requirements,
+        meeting_notes=meeting_notes,
         cycles=args.cycles,
-        title=source_path.stem,
+        title=source_path.stem if source_path else requirements_path.stem,
+        source_path=str(source_path) if source_path else None,
+        meeting_notes_path=str(meeting_notes_path) if meeting_notes_path else None,
     )
 
     if args.dry_run:

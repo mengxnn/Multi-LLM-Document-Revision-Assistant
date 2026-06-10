@@ -101,5 +101,33 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("调整语气", seen_contexts[1].previous_writer_instructions)
 
 
+    def test_writer_and_reviewer_receive_optional_meeting_notes(self):
+        seen_writer_contexts = []
+        seen_reviewer_contexts = []
+
+        def writer(context):
+            seen_writer_contexts.append(context)
+            return "draft"
+
+        def reviewer(context):
+            seen_reviewer_contexts.append(context)
+            return "是否继续修改：否"
+
+        run_revision_loop(
+            RevisionRequest(
+                source_text="",
+                requirements="Write a project plan.",
+                meeting_notes="Meeting decided to add a timeline.",
+                cycles=1,
+            ),
+            writer=writer,
+            reviewer=reviewer,
+        )
+
+        self.assertEqual(seen_writer_contexts[0].source_text, "")
+        self.assertIn("timeline", seen_writer_contexts[0].meeting_notes)
+        self.assertIn("timeline", seen_reviewer_contexts[0].meeting_notes)
+
+
 if __name__ == "__main__":
     unittest.main()

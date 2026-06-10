@@ -10,8 +10,11 @@ from .review_analysis import parse_review_decision
 class RevisionRequest:
     source_text: str
     requirements: str
+    meeting_notes: str = ""
     cycles: int = 2
     title: str = "office-revision"
+    source_path: str | None = None
+    meeting_notes_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -19,6 +22,7 @@ class WriterContext:
     source_text: str
     requirements: str
     cycle_index: int
+    meeting_notes: str = ""
     previous_draft: str | None = None
     previous_review: str | None = None
     previous_writer_instructions: str | None = None
@@ -30,6 +34,7 @@ class ReviewContext:
     requirements: str
     cycle_index: int
     draft: str
+    meeting_notes: str = ""
 
 
 @dataclass(frozen=True)
@@ -81,6 +86,7 @@ def run_revision_loop(
             WriterContext(
                 source_text=request.source_text,
                 requirements=request.requirements,
+                meeting_notes=request.meeting_notes,
                 cycle_index=cycle_index,
                 previous_draft=previous_draft,
                 previous_review=previous_review,
@@ -91,6 +97,7 @@ def run_revision_loop(
             ReviewContext(
                 source_text=request.source_text,
                 requirements=request.requirements,
+                meeting_notes=request.meeting_notes,
                 cycle_index=cycle_index,
                 draft=draft,
             )

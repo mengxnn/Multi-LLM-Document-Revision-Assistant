@@ -1,12 +1,84 @@
-# 自动修改文档原型
+# 多 agent 办公文档修订助手
 
-这是一个多模型办公文档修改工具。用户日常只需要关心三件事：
+这是一个多模型办公文档修订工具。基本流程是：
 
-1. API 配置在哪里。
-2. 初稿和修改要求放在哪里。
-3. 修改结果在哪里看。
+```text
+修改要求 + 可选初稿 + 可选会议纪要
+-> writer 生成修改稿
+-> reviewer 审查并给下一轮建议
+-> 多轮循环
+-> 输出 final.docx / final.md / review.md / run_log.json
+```
 
-## 1. API 配置在哪里
+## 1. 输入文件
+
+默认输入目录是：
+
+```text
+inputs/
+```
+
+### 必填：修改要求
+
+```text
+inputs/requirements.md
+```
+
+这里写用户希望怎么改、输出什么类型文档、审查重点是什么。
+
+如果该文件不存在或内容为空，程序会停止并提示错误。
+
+### 可选：初稿或原文
+
+程序会按顺序自动查找：
+
+```text
+inputs/source.docx
+inputs/source.md
+inputs/source.txt
+```
+
+找到第一个存在的文件就作为初稿。支持：
+
+- `.docx`
+- `.md`
+- `.txt`
+
+如果没有 source 文件，或 source 文件内容为空，程序会进入“无初稿起草模式”：writer 会根据修改要求和可选会议纪要从零生成初稿。
+
+### 可选：会议纪要
+
+```text
+inputs/meeting_notes.md
+```
+
+如果存在且内容不为空，writer 和 reviewer 都会参考会议纪要。
+
+如果该文件不存在或内容为空，程序会按“没有会议纪要”处理。
+
+### 示例模板
+
+仓库中保留示例模板：
+
+```text
+inputs/source.example.docx
+inputs/requirements.example.md
+inputs/meeting_notes.example.md
+```
+
+真实办公文件不会提交到 git。首次使用时可以复制模板：
+
+```powershell
+Copy-Item .\inputs\source.example.docx .\inputs\source.docx
+Copy-Item .\inputs\requirements.example.md .\inputs\requirements.md
+Copy-Item .\inputs\meeting_notes.example.md .\inputs\meeting_notes.md
+```
+
+如果没有初稿，不需要创建 `source.docx`。
+
+如果没有会议纪要，不需要创建 `meeting_notes.md`。
+
+## 2. API 配置
 
 配置文件：
 
@@ -14,30 +86,24 @@
 config/settings.env
 ```
 
-如果这个文件不存在，先复制模板：
+如果该文件不存在，先复制模板：
 
 ```powershell
 Copy-Item .\config\settings.example.env .\config\settings.env
 ```
 
-分别填写 writer 和 reviewer：
+writer 和 reviewer 可以使用不同平台、不同 key、不同模型：
 
 ```text
 WRITER_API_KEY=writer 的 API key
-WRITER_BASE_URL=writer 的接口地址，可留空
+WRITER_BASE_URL=writer 的接口地址
 WRITER_MODEL=writer 使用的模型名
 WRITER_ENABLE_SEARCH=true
 
 REVIEWER_API_KEY=reviewer 的 API key
-REVIEWER_BASE_URL=reviewer 的接口地址，可留空
+REVIEWER_BASE_URL=reviewer 的接口地址
 REVIEWER_MODEL=reviewer 使用的模型名
 REVIEWER_ENABLE_SEARCH=true
-```
-
-如果使用第三方 OpenAI-compatible 平台，`BASE_URL` 通常类似：
-
-```text
-https://你的接口地址/v1
 ```
 
 连接测试：
@@ -46,86 +112,7 @@ https://你的接口地址/v1
 .\scripts\check_connections.ps1
 ```
 
-### . 结构化 reviewer 和提前停止
-
-reviewer 会按固定 Markdown 结构输出审查意见：
-
-```text
-一、总体结论
-是否继续修改：是/否
-总体评分：1-5
-结论说明：……
-
-二、修改要求落实情况
-……
-
-三、主要问题
-……
-
-四、下一轮修改清单
-……
-
-五、给 writer 的修改指令
-……
-```
-
-程序会解析：
-
-- `是否继续修改：否`：提前停止，不再跑满 `--cycles`
-- `是否继续修改：是`：继续下一轮，直到达到 `--cycles`
-- `总体评分：1-5`：记录到 `run_log.json`
-- `五、给 writer 的修改指令`：优先传给下一轮 writer
-
-如果 reviewer 没有按格式输出，程序会保守处理：不提前停止，继续按最大轮数运行。若没有“给 writer 的修改指令”，程序会尝试使用“四、下一轮修改清单”作为兜底。
-
-如果输出里显示 `search=on`，说明该角色运行时会把联网搜索参数发送给模型平台。
-
-```text
-[OK] WRITER model=...: 连接成功 search=on
-[OK] REVIEWER model=...: 连接成功 search=on
-```
-
-如果某个模型不支持联网搜索，连接测试或正式运行可能会返回平台错误。此时可以把对应角色的 `ENABLE_SEARCH` 改成 `false`，或者换成平台明确支持联网搜索的模型。
-
-### AutoGen 模型能力配置
-
-这些字段用于告诉 AutoGen 模型支持哪些能力：
-
-```text
-MODEL_FAMILY=unknown
-VISION=false
-FUNCTION_CALLING=false
-JSON_OUTPUT=false
-STRUCTURED_OUTPUT=false
-ENABLE_SEARCH=true
-```
-
-含义：
-
-- `ENABLE_SEARCH`：是否向模型平台发送联网搜索参数。当前 DashScope 兼容接口使用 `enable_search=true`。
-- `VISION`：是否支持图片输入。
-- `FUNCTION_CALLING`：是否支持工具/函数调用。
-- `JSON_OUTPUT`：是否支持 JSON 模式输出。
-- `STRUCTURED_OUTPUT`：是否支持结构化输出。
-- `MODEL_FAMILY`：AutoGen 用来判断模型家族；第三方模型通常保持 `unknown`。
-
-当前写作-审查流程不需要图片、函数调用或结构化输出，所以这些能力保持 `false` 更稳。联网搜索可按角色单独开启或关闭。
-
-## 2. 初稿和要求放在哪里
-
-用户只需要替换 `inputs` 目录里的两个文件。
-
-```text
-inputs/source.docx
-inputs/requirements.md
-```
-
-- `inputs/source.docx`：放 Word 初稿、原文、已有草稿。
-- `inputs/requirements.md`：写修改要求、会议意见、审查重点。
-
-`.doc` 老格式暂不直接支持，请先用 Word 或 WPS 另存为 `.docx`。
-
-## 3. 怎么运行
+## 3. 运行
 
 演示/测试流程，不调用真实大模型：
 
@@ -145,102 +132,83 @@ inputs/requirements.md
 .\.venv\Scripts\python.exe .\run_revision.py
 ```
 
-默认会读取：
+常用参数：
 
-```text
-inputs/source.docx
-inputs/requirements.md
+```powershell
+.\.venv\Scripts\python.exe .\run_revision.py `
+  --source .\inputs\other.docx `
+  --requirements .\inputs\other_requirements.md `
+  --meeting-notes .\inputs\meeting_notes.md `
+  --cycles 5
 ```
 
-## 4. 输出结果在哪里
+其中 `--source` 和 `--meeting-notes` 都是可选的。
 
-演示/测试输出：
+## 4. 输出目录
+
+dry-run 输出到：
 
 ```text
+outputs/demo/<timestamp>
 outputs/demo/latest
 ```
 
-每次运行还会额外生成一个时间戳目录，例如：
+真实模型输出到：
 
 ```text
-outputs/demo/20260610_093000
-```
-
-正式使用输出：
-
-```text
+outputs/autogen/<timestamp>
 outputs/autogen/latest
 ```
 
-每次运行还会额外生成一个时间戳目录，例如：
+如果 `latest` 里的 Word 文件正被打开，刷新 `latest` 可能会被跳过，但时间戳目录仍会保留本次结果。
+
+主要输出：
 
 ```text
-outputs/autogen/20260610_093000
+final.docx
+final.md
+review.md
+run_log.json
 ```
 
-`latest` 始终是最近一次运行结果；时间戳目录用于保留历史运行记录。
-
-输出文件：
-
-- `final.docx`：最终 Word 修改稿。
-- `final.md`：最终稿的 Markdown 文本版本。
-- `review.md`：最终审查意见。
-- `run_log.json`：每一轮写作和审查记录。
-
-此外，还会保留每轮writer的输出和reviewer的审核结果:
+每轮结果：
 
 ```text
 drafts/
   round_01_draft.md
   round_01_draft.docx
-  round_02_draft.md
-  round_02_draft.docx
-  ...
 
 reviews/
   round_01_review.md
   round_01_review.docx
-  round_02_review.md
-  round_02_review.docx
-  ...
 ```
 
-`drafts/` 保存writer每轮的输出. `reviews/` 保存reviewer每轮的审核内容. 如果reviewer提前停止流程，只有已完成的轮次会被保存。
+## 5. reviewer 提前停止
 
-因为 reviewer 可以写 `是否继续修改：否` 来提前停止，所以把最大轮数设高一些更灵活；它代表“最多 5 轮”，不是一定跑满 5 轮。
-
-## 5. 常用自定义
-
-如果要改轮数：
-
-```powershell
-.\.venv\Scripts\python.exe .\run_revision.py --cycles 3
-```
-
-如果要临时指定其他输入文件：
-
-```powershell
-.\.venv\Scripts\python.exe .\run_revision.py `
-  --source .\inputs\other.docx `
-  --requirements .\inputs\other_requirements.md
-```
-
-如果要改 writer 或 reviewer 的角色提示词：
+reviewer 会输出固定结构，其中包括：
 
 ```text
-config/writer_system_prompt.md
-config/reviewer_system_prompt.md
+是否继续修改：是/否
+总体评分：1-5
 ```
 
-## 6. 当前支持范围
+如果 reviewer 写：
 
-`.docx` 支持：
+```text
+是否继续修改：否
+```
 
-- 标题
-- 普通段落
-- 表格文本
+程序会提前停止，不再跑满 `--cycles`。
+
+## 6. 当前 Word 支持范围
+
+已支持：
+
+- `.docx` 读取标题、段落、表格文本
+- `.docx` 输出最终稿和每轮稿件
 - 加粗文本
 - 表格内换行
+- 跳过 Markdown 表格分隔行
 
 暂不完整支持：
 
@@ -250,63 +218,16 @@ config/reviewer_system_prompt.md
 - 修订痕迹
 - 文本框和复杂版式
 
-## 7. 判断基础流程是否正常
+## 7. 判断本地流程是否正常
 
-运行自动测试：
+运行测试：
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -v
 ```
 
-看到 `OK` 就说明本地程序逻辑正常。API 是否可用仍以连接测试为准：
+看到 `OK` 表示本地程序逻辑正常。API 是否可用仍以连接测试为准：
 
 ```powershell
 .\scripts\check_connections.ps1
 ```
-## 8. 输入文件上传和隐私
-
-仓库只应上传模板示例，不应上传真实办公文档。
-
-可上传的模板文件：
-
-```text
-inputs/source.example.docx
-inputs/requirements.example.md
-```
-
-本地真实使用文件：
-
-```text
-inputs/source.docx
-inputs/requirements.md
-```
-
-这两个真实文件已经写入 `.gitignore`，不会再被 git 新增跟踪。首次使用或重置模板时，可以复制：
-
-```powershell
-Copy-Item .\inputs\source.example.docx .\inputs\source.docx
-Copy-Item .\inputs\requirements.example.md .\inputs\requirements.md
-```
-
-如果真实内容已经被提交但还没有上传远程仓库，使用普通提交删除跟踪即可：
-
-```powershell
-git rm --cached -- inputs/source.docx inputs/requirements.md
-git add .gitignore inputs/source.example.docx inputs/requirements.example.md
-git commit -m "chore: ignore local input documents"
-```
-
-如果真实内容已经上传到 GitHub/Gitee 等远程仓库，仅 `git rm --cached` 只能让后续提交不再包含它们，历史提交里仍然可能存在。此时建议：
-
-1. 立即更换或撤销文档中包含的敏感信息、密钥、账号等。
-2. 将远程仓库改为私有，或删除公开仓库。
-3. 如需彻底清理历史，使用 `git filter-repo` 或 BFG Repo-Cleaner 重写历史后强制推送。
-4. 通知所有协作者重新克隆仓库，避免旧历史继续传播。
-
-现在默认脚本把最大轮数设为 5：
-
-```powershell
-.\scripts\run_demo_docx.ps1
-.\scripts\run_real_docx.ps1
-```
-

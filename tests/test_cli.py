@@ -143,8 +143,8 @@ class CliTests(unittest.TestCase):
     def test_defaults_to_inputs_directory_for_daily_use(self):
         args = main.__globals__["build_parser"]().parse_args([])
 
-        self.assertEqual(args.source, "inputs/source.docx")
-        self.assertEqual(args.requirements, "inputs/requirements.md")
+        self.assertIsNone(args.source)
+        self.assertIsNone(args.requirements)
 
     def test_docx_source_writes_round_drafts_and_reviews(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -185,6 +185,106 @@ class CliTests(unittest.TestCase):
             review_doc = Document(output / "reviews" / "round_01_review.docx")
             self.assertTrue(any(paragraph.text for paragraph in draft_doc.paragraphs))
             self.assertTrue(any(paragraph.text for paragraph in review_doc.paragraphs))
+
+
+    def test_runs_without_source_when_requirements_exist(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "inputs"
+            requirements = root / "requirements.md"
+            output = root / "output"
+            inputs.mkdir()
+            requirements.write_text("Write a plan from scratch.", encoding="utf-8")
+
+            with patch("office_revision.cli.DEFAULT_INPUT_DIR", inputs):
+                exit_code = main(
+                    [
+                        "--requirements",
+                        str(requirements),
+                        "--output-dir",
+                        str(output),
+                        "--cycles",
+                        "1",
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((output / "final.md").exists())
+            self.assertTrue((output / "final.docx").exists())
+            run_log = json.loads((output / "run_log.json").read_text(encoding="utf-8"))
+            self.assertFalse(run_log["has_source"])
+            self.assertIsNone(run_log["source_path"])
+
+    def test_empty_source_and_empty_meeting_notes_are_treated_as_missing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.md"
+            requirements = root / "requirements.md"
+            meeting_notes = root / "meeting_notes.md"
+            output = root / "output"
+            source.write_text("   \n", encoding="utf-8")
+            requirements.write_text("Write a plan.", encoding="utf-8")
+            meeting_notes.write_text("   \n", encoding="utf-8")
+
+            exit_code = main(
+                [
+                    "--source",
+                    str(source),
+                    "--requirements",
+                    str(requirements),
+                    "--meeting-notes",
+                    str(meeting_notes),
+                    "--output-dir",
+                    str(output),
+                    "--cycles",
+                    "1",
+                    "--dry-run",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            run_log = json.loads((output / "run_log.json").read_text(encoding="utf-8"))
+            self.assertEqual(run_log["source_path"], str(source))
+            self.assertEqual(run_log["meeting_notes_path"], str(meeting_notes))
+            self.assertFalse(run_log["has_source"])
+            self.assertFalse(run_log["has_meeting_notes"])
+
+    def test_discovers_md_source_when_default_docx_is_missing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "inputs"
+            output = root / "output"
+            inputs.mkdir()
+            (inputs / "source.md").write_text("Markdown source text.", encoding="utf-8")
+            (inputs / "requirements.md").write_text("Improve it.", encoding="utf-8")
+
+            with patch("office_revision.cli.DEFAULT_INPUT_DIR", inputs):
+                exit_code = main(["--output-dir", str(output), "--cycles", "1", "--dry-run"])
+
+            self.assertEqual(exit_code, 0)
+            run_log = json.loads((output / "run_log.json").read_text(encoding="utf-8"))
+            self.assertTrue(run_log["has_source"])
+            self.assertEqual(run_log["source_path"], str(inputs / "source.md"))
+
+    def test_missing_or_empty_requirements_stops_with_clear_error(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            empty_requirements = root / "requirements.md"
+            empty_requirements.write_text(" \n", encoding="utf-8")
+
+            with self.assertRaises(SystemExit) as raised:
+                main(
+                    [
+                        "--requirements",
+                        str(empty_requirements),
+                        "--output-dir",
+                        str(root / "output"),
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertIn("requirements", str(raised.exception))
 
 
 if __name__ == "__main__":
