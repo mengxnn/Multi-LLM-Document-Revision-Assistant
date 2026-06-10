@@ -114,6 +114,32 @@ class CliTests(unittest.TestCase):
         self.assertEqual(main.__globals__["default_output_dir"](dry_run_args), Path("outputs/demo/latest"))
         self.assertEqual(main.__globals__["default_output_dir"](real_args), Path("outputs/autogen/latest"))
 
+    def test_default_run_output_dirs_include_timestamp_and_latest(self):
+        dry_run_args = main.__globals__["build_parser"]().parse_args(["--dry-run"])
+        real_args = main.__globals__["build_parser"]().parse_args([])
+        explicit_args = main.__globals__["build_parser"]().parse_args(["--output-dir", "custom/out"])
+
+        self.assertEqual(
+            main.__globals__["default_run_output_dirs"](dry_run_args, "20260610_093000"),
+            [Path("outputs/demo/20260610_093000"), Path("outputs/demo/latest")],
+        )
+        self.assertEqual(
+            main.__globals__["default_run_output_dirs"](real_args, "20260610_093000"),
+            [Path("outputs/autogen/20260610_093000"), Path("outputs/autogen/latest")],
+        )
+        self.assertEqual(
+            main.__globals__["default_run_output_dirs"](explicit_args, "20260610_093000"),
+            [Path("custom/out")],
+        )
+
+    def test_locked_latest_directory_is_skipped_without_failure(self):
+        latest = Path("outputs/autogen/latest")
+        timestamped = Path("outputs/autogen/20260610_093000")
+
+        with patch("office_revision.cli.shutil.rmtree", side_effect=PermissionError("locked")):
+            self.assertFalse(main.__globals__["prepare_output_dir"](latest))
+            self.assertTrue(main.__globals__["prepare_output_dir"](timestamped))
+
     def test_defaults_to_inputs_directory_for_daily_use(self):
         args = main.__globals__["build_parser"]().parse_args([])
 

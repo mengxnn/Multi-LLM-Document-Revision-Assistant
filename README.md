@@ -160,11 +160,25 @@ inputs/requirements.md
 outputs/demo/latest
 ```
 
+每次运行还会额外生成一个时间戳目录，例如：
+
+```text
+outputs/demo/20260610_093000
+```
+
 正式使用输出：
 
 ```text
 outputs/autogen/latest
 ```
+
+每次运行还会额外生成一个时间戳目录，例如：
+
+```text
+outputs/autogen/20260610_093000
+```
+
+`latest` 始终是最近一次运行结果；时间戳目录用于保留历史运行记录。
 
 输出文件：
 

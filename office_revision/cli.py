@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from dataclasses import asdict, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
@@ -116,6 +118,23 @@ def default_output_dir(args) -> Path:
     return Path("outputs/autogen/latest")
 
 
+def default_run_output_dirs(args, timestamp: str | None = None) -> list[Path]:
+    if args.output_dir:
+        return [Path(args.output_dir)]
+    run_timestamp = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_dir = Path("outputs/demo" if args.dry_run else "outputs/autogen")
+    return [base_dir / run_timestamp, base_dir / "latest"]
+
+
+def prepare_output_dir(output_dir: Path) -> bool:
+    if output_dir.name == "latest" and output_dir.exists():
+        try:
+            shutil.rmtree(output_dir)
+        except PermissionError:
+            return False
+    return True
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -174,7 +193,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             reviewer_prompt_path=args.reviewer_prompt,
         )
 
-    output_dir = default_output_dir(args)
-    write_outputs(result, output_dir, source_path=source_path)
-    print(f"Wrote revision outputs to {output_dir}")
+    output_dirs = default_run_output_dirs(args)
+    written_dirs: list[Path] = []
+    skipped_dirs: list[Path] = []
+    for output_dir in output_dirs:
+        if not prepare_output_dir(output_dir):
+            skipped_dirs.append(output_dir)
+            continue
+        write_outputs(result, output_dir, source_path=source_path)
+        written_dirs.append(output_dir)
+    print("Wrote revision outputs to " + ", ".join(str(path) for path in written_dirs))
+    if skipped_dirs:
+        print(
+            "Skipped locked output directories: "
+            + ", ".join(str(path) for path in skipped_dirs)
+            + ". Close any open files there before refreshing latest."
+        )
     return 0
