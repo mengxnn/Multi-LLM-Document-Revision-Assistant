@@ -7,6 +7,7 @@ from unittest.mock import patch
 from docx import Document
 
 from office_revision.cli import main
+from office_revision.config import ModelSettings
 from office_revision.connection_test import ConnectionCheckResult
 
 
@@ -118,14 +119,21 @@ class CliTests(unittest.TestCase):
         dry_run_args = main.__globals__["build_parser"]().parse_args(["--dry-run"])
         real_args = main.__globals__["build_parser"]().parse_args([])
         explicit_args = main.__globals__["build_parser"]().parse_args(["--output-dir", "custom/out"])
+        project_dir = Path("projects/Project_20260611")
 
         self.assertEqual(
-            main.__globals__["default_run_output_dirs"](dry_run_args, "20260610_093000"),
-            [Path("outputs/demo/20260610_093000"), Path("outputs/demo/latest")],
+            main.__globals__["default_run_output_dirs"](dry_run_args, "093000", project_dir=project_dir),
+            [
+                Path("projects/Project_20260611/dry_run_outputs/093000-pending"),
+                Path("projects/Project_20260611/dry_run_outputs/latest"),
+            ],
         )
         self.assertEqual(
-            main.__globals__["default_run_output_dirs"](real_args, "20260610_093000"),
-            [Path("outputs/autogen/20260610_093000"), Path("outputs/autogen/latest")],
+            main.__globals__["default_run_output_dirs"](real_args, "093000", project_dir=project_dir),
+            [
+                Path("projects/Project_20260611/outputs/093000-pending"),
+                Path("projects/Project_20260611/outputs/latest"),
+            ],
         )
         self.assertEqual(
             main.__globals__["default_run_output_dirs"](explicit_args, "20260610_093000"),
@@ -133,12 +141,69 @@ class CliTests(unittest.TestCase):
         )
 
     def test_locked_latest_directory_is_skipped_without_failure(self):
-        latest = Path("outputs/autogen/latest")
-        timestamped = Path("outputs/autogen/20260610_093000")
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        root = Path(temp_dir.name)
+        latest = root / "projects" / "Project_20260611" / "outputs" / "latest"
+        timestamped = root / "projects" / "Project_20260611" / "outputs" / "093000-pending"
 
+        latest.mkdir(parents=True, exist_ok=True)
         with patch("office_revision.cli.shutil.rmtree", side_effect=PermissionError("locked")):
             self.assertFalse(main.__globals__["prepare_output_dir"](latest))
             self.assertTrue(main.__globals__["prepare_output_dir"](timestamped))
+
+    def test_default_dry_run_creates_project_directory_outputs_and_input_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "inputs"
+            projects = root / "projects"
+            inputs.mkdir()
+            (inputs / "source.md").write_text("Markdown source text.", encoding="utf-8")
+            (inputs / "requirements.md").write_text("Improve it.", encoding="utf-8")
+
+            with patch("office_revision.cli.DEFAULT_INPUT_DIR", inputs):
+                exit_code = main(
+                    [
+                        "--projects-root",
+                        str(projects),
+                        "--project-title",
+                        "Project Plan",
+                        "--cycles",
+                        "1",
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            project_dirs = list(projects.glob("Project_Plan_*"))
+            self.assertEqual(len(project_dirs), 1)
+            project_dir = project_dirs[0]
+            self.assertTrue((project_dir / "project.json").exists())
+            self.assertTrue((project_dir / "inputs" / "source.md").exists())
+            self.assertTrue((project_dir / "inputs" / "requirements.md").exists())
+            self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "final.md").exists())
+            self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "session_status.json").exists())
+
+    def test_choose_project_title_uses_llm_for_real_runs(self):
+        args = main.__globals__["build_parser"]().parse_args(["--project-title-language", "zh"])
+        reviewer_settings = ModelSettings(
+            role="REVIEWER",
+            api_key="key",
+            base_url="",
+            model="model",
+        )
+
+        with patch("office_revision.cli.generate_llm_project_title", return_value="项目实施方案修订"):
+            title = main.__globals__["choose_project_title"](
+                args,
+                source_path=Path("inputs/source.docx"),
+                source_text="项目实施方案正文",
+                requirements="请修改",
+                meeting_notes="",
+                reviewer_settings=reviewer_settings,
+            )
+
+        self.assertEqual(title, "项目实施方案修订")
 
     def test_defaults_to_inputs_directory_for_daily_use(self):
         args = main.__globals__["build_parser"]().parse_args([])

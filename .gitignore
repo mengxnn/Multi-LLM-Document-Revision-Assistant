@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 
 outputs/
+projects/
 
 # Local input documents. Commit only example templates.
 inputs/source.docx

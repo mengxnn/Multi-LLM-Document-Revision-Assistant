@@ -291,6 +291,62 @@ def generate_llm_changes_summary(
     )
 
 
+async def _generate_llm_project_title_async(
+    *,
+    source_text: str,
+    requirements: str,
+    meeting_notes: str,
+    reviewer_settings: ModelSettings,
+    language: str,
+) -> str:
+    AssistantAgent, OpenAIChatCompletionClient = _optional_imports()
+    reviewer_client = _model_client(OpenAIChatCompletionClient, reviewer_settings)
+    title_agent = AssistantAgent(
+        name="project_title_generator",
+        model_client=reviewer_client,
+        system_message=(
+            "你负责为办公文档修订任务生成简短文件夹名。"
+            "只输出一个名称，不要解释，不要加引号。"
+        ),
+    )
+    try:
+        result = await title_agent.run(
+            task=(
+                "请根据以下材料生成一个简短、易识别的项目文件夹名。\n"
+                "要求：\n"
+                "1. 只输出一个名称。\n"
+                "2. 不超过 18 个中文字符或 30 个英文字符。\n"
+                "3. 不要包含日期、时间、标点符号或 Windows 文件名非法字符。\n"
+                f"4. 语言偏好：{language}。auto 表示按材料主要语言。\n\n"
+                f"【初稿/原文】\n{source_text[:1200] or '未提供'}\n\n"
+                f"【修改要求】\n{requirements[:1200]}\n\n"
+                f"【会议纪要】\n{meeting_notes[:800] or '未提供'}"
+            )
+        )
+        return _message_content(result).strip()
+    finally:
+        await reviewer_client.close()
+
+
+def generate_llm_project_title(
+    *,
+    source_text: str,
+    requirements: str,
+    meeting_notes: str,
+    reviewer_settings: ModelSettings,
+    language: str = "auto",
+) -> str:
+    return asyncio.run(
+        _generate_llm_project_title_async(
+            source_text=source_text,
+            requirements=requirements,
+            meeting_notes=meeting_notes,
+            reviewer_settings=reviewer_settings,
+            language=language,
+        )
+    )
+
+
 def _llm_summary_markdown_from_response(result: RevisionResult, response: str) -> str:
     polish = parse_llm_summary_polish(response)
     return build_llm_polished_changes_summary(result, polish)

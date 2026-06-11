@@ -158,19 +158,33 @@ REVIEWER_ENABLE_SEARCH=true
 
 ## 4. 输出目录
 
+默认情况下，程序会创建一个项目目录：
+
+```text
+projects/<项目名_YYYYMMDD>/
+  project.json
+  inputs/
+  outputs/
+  dry_run_outputs/
+```
+
+`<项目名>` 会优先由大模型根据文档内容和修改要求生成；如果生成失败，会回退到 source 文件名或 requirements 内容摘要。目录名会自动清洗 Windows 不允许的字符。
+
 dry-run 输出到：
 
 ```text
-outputs/demo/<timestamp>
-outputs/demo/latest
+projects/<项目名_YYYYMMDD>/dry_run_outputs/<HHMMSS-pending>
+projects/<项目名_YYYYMMDD>/dry_run_outputs/latest
 ```
 
 真实模型输出到：
 
 ```text
-outputs/autogen/<timestamp>
-outputs/autogen/latest
+projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-pending>
+projects/<项目名_YYYYMMDD>/outputs/latest
 ```
+
+项目目录里的 `inputs/` 会保存本次使用的输入文件快照，方便回看当时用的是哪份 source、requirements 和 meeting_notes。
 
 如果 `latest` 里的 Word 文件正被打开，刷新 `latest` 可能会被跳过，但时间戳目录仍会保留本次结果。
 

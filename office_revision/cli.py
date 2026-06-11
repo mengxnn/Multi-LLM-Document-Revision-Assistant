@@ -11,7 +11,14 @@ from typing import Sequence
 from .config import load_env_file, load_role_settings, merged_env_values
 from .document_io import read_source_text, write_final_docx
 from .dry_run import dry_run_reviewer, dry_run_writer
-from .autogen_runner import generate_llm_changes_summary
+from .project_manager import (
+    create_project_context,
+    fallback_project_title,
+    snapshot_project_inputs,
+    write_latest_session,
+    write_session_status,
+)
+from .autogen_runner import generate_llm_changes_summary, generate_llm_project_title
 from .summary import (
     SummaryGeneration,
     build_changes_summary,
@@ -48,6 +55,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         default=None,
         help="Directory for final.md, review.md, and run_log.json.",
+    )
+    parser.add_argument(
+        "--projects-root",
+        default="projects",
+        help="Root directory for managed project folders when --output-dir is not set.",
+    )
+    parser.add_argument(
+        "--project-title",
+        default=None,
+        help="Optional project title used for projects/<title>_<YYYYMMDD>.",
+    )
+    parser.add_argument(
+        "--project-title-language",
+        choices=("auto", "zh", "en"),
+        default="auto",
+        help="Preferred language for future LLM-generated project titles.",
     )
     parser.add_argument("--cycles", type=int, default=2, help="Writer-review cycles to run.")
     parser.add_argument(
@@ -160,12 +183,19 @@ def default_output_dir(args) -> Path:
     return Path("outputs/autogen/latest")
 
 
-def default_run_output_dirs(args, timestamp: str | None = None) -> list[Path]:
+def default_run_output_dirs(
+    args,
+    timestamp: str | None = None,
+    *,
+    project_dir: Path | None = None,
+) -> list[Path]:
     if args.output_dir:
         return [Path(args.output_dir)]
-    run_timestamp = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_dir = Path("outputs/demo" if args.dry_run else "outputs/autogen")
-    return [base_dir / run_timestamp, base_dir / "latest"]
+    run_timestamp = timestamp or datetime.now().strftime("%H%M%S")
+    if project_dir is None:
+        project_dir = Path("projects") / f"document_{datetime.now().strftime('%Y%m%d')}"
+    base_dir = project_dir / ("dry_run_outputs" if args.dry_run else "outputs")
+    return [base_dir / f"{run_timestamp}-pending", base_dir / "latest"]
 
 
 def prepare_output_dir(output_dir: Path) -> bool:
@@ -243,6 +273,33 @@ def build_summary_generation(
         )
 
 
+def choose_project_title(
+    args,
+    *,
+    source_path: Path | None,
+    source_text: str,
+    requirements: str,
+    meeting_notes: str = "",
+    reviewer_settings=None,
+) -> str:
+    if args.project_title:
+        return args.project_title
+    if not args.dry_run and reviewer_settings is not None:
+        try:
+            title = generate_llm_project_title(
+                source_text=source_text,
+                requirements=requirements,
+                meeting_notes=meeting_notes,
+                reviewer_settings=reviewer_settings,
+                language=args.project_title_language,
+            )
+            if title.strip():
+                return title.strip()
+        except Exception:
+            pass
+    return fallback_project_title(source_path, source_text, requirements)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -279,6 +336,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     requirements = read_required_text(requirements_path, "requirements")
     meeting_notes = read_optional_document_text(meeting_notes_path)
 
+    project_context = None
+    if not args.output_dir:
+        now = datetime.now()
+        project_title = choose_project_title(
+            args,
+            source_path=source_path,
+            source_text=source_text,
+            requirements=requirements,
+            meeting_notes=meeting_notes,
+            reviewer_settings=reviewer_settings,
+        )
+        project_context = create_project_context(
+            projects_root=args.projects_root,
+            title=project_title,
+            created_date=now.strftime("%Y%m%d"),
+        )
+        snapshot_project_inputs(
+            project_context,
+            source_path=source_path,
+            requirements_path=requirements_path,
+            meeting_notes_path=meeting_notes_path,
+        )
+
     request = RevisionRequest(
         source_text=source_text,
         requirements=requirements,
@@ -312,7 +392,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         reviewer_settings=reviewer_settings,
     )
 
-    output_dirs = default_run_output_dirs(args)
+    run_time = datetime.now().strftime("%H%M%S")
+    output_dirs = default_run_output_dirs(
+        args,
+        run_time,
+        project_dir=project_context.project_dir if project_context else None,
+    )
     written_dirs: list[Path] = []
     skipped_dirs: list[Path] = []
     for output_dir in output_dirs:
@@ -325,7 +410,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_path=source_path,
             summary_generation=summary_generation,
         )
+        write_session_status(output_dir)
         written_dirs.append(output_dir)
+    if project_context and written_dirs:
+        primary_session_dir = next((path for path in written_dirs if path.name != "latest"), written_dirs[0])
+        output_root = project_context.dry_run_outputs_dir if args.dry_run else project_context.outputs_dir
+        write_latest_session(output_root, primary_session_dir)
     print("Wrote revision outputs to " + ", ".join(str(path) for path in written_dirs))
     if skipped_dirs:
         print(
