@@ -112,6 +112,36 @@ REVIEWER_ENABLE_SEARCH=true
 .\scripts\check_connections.ps1
 ```
 
+## 8. Continue 继续修改
+
+如果对某次结果不满意，可以在对应项目目录里填写反馈：
+
+```text
+projects/<项目名_YYYYMMDD>/inputs/feedback.md
+```
+
+然后运行：
+
+```powershell
+.\scripts\continue_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>"
+```
+
+dry-run 测试：
+
+```powershell
+.\scripts\continue_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -DryRun
+```
+
+continue 会读取上一版 `latest/final.md` 或 `latest/final.docx`，结合 `inputs/feedback.md` 进行整体重写，并输出到：
+
+```text
+projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-continue>/
+  v1/   上一版结果备份
+  v2/   根据反馈生成的新版本
+```
+
+如果使用 `-DryRun`，结果会输出到 `dry_run_outputs/<HHMMSS-continue>/`。
+
 ## 3. 运行
 
 演示/测试流程，不调用真实大模型：

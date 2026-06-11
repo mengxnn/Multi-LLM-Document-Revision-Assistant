@@ -9,6 +9,16 @@ from pathlib import Path
 from typing import Sequence
 
 from .config import load_env_file, load_role_settings, merged_env_values
+from .continue_flow import (
+    build_continue_requirements,
+    copy_previous_version,
+    dry_run_feedback_analysis,
+    ensure_feedback_template,
+    find_latest_output_dir,
+    find_project_requirements_path,
+    next_version_dir,
+    read_feedback,
+)
 from .document_io import read_source_text, write_final_docx
 from .dry_run import dry_run_reviewer, dry_run_writer
 from .project_manager import (
@@ -18,7 +28,11 @@ from .project_manager import (
     write_latest_session,
     write_session_status,
 )
-from .autogen_runner import generate_llm_changes_summary, generate_llm_project_title
+from .autogen_runner import (
+    generate_llm_changes_summary,
+    generate_llm_feedback_analysis,
+    generate_llm_project_title,
+)
 from .summary import (
     SummaryGeneration,
     build_changes_summary,
@@ -60,6 +74,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--projects-root",
         default="projects",
         help="Root directory for managed project folders when --output-dir is not set.",
+    )
+    parser.add_argument(
+        "--continue-project",
+        default=None,
+        help="Continue revising an existing projects/<project> directory using inputs/feedback.md.",
     )
     parser.add_argument(
         "--project-title",
@@ -112,9 +131,10 @@ def build_parser() -> argparse.ArgumentParser:
 def result_to_dict(
     result: RevisionResult,
     summary_generation: SummaryGeneration | None = None,
+    extra: dict | None = None,
 ) -> dict:
     summary_generation = summary_generation or SummaryGeneration(text=build_changes_summary(result))
-    return {
+    data = {
         "title": result.request.title,
         "cycles": result.request.cycles,
         "actual_cycles": len(result.passes),
@@ -129,6 +149,9 @@ def result_to_dict(
         "summary_fallback_reason": summary_generation.fallback_reason,
         "passes": [asdict(item) for item in result.passes],
     }
+    if extra:
+        data.update(extra)
+    return data
 
 
 def write_outputs(
@@ -136,13 +159,14 @@ def write_outputs(
     output_dir: Path,
     source_path: Path | None = None,
     summary_generation: SummaryGeneration | None = None,
+    extra_log: dict | None = None,
 ) -> None:
     summary_generation = summary_generation or SummaryGeneration(text=build_changes_summary(result))
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "final.md").write_text(result.final_text, encoding="utf-8")
     (output_dir / "review.md").write_text(result.final_review, encoding="utf-8")
     (output_dir / "run_log.json").write_text(
-        json.dumps(result_to_dict(result, summary_generation), ensure_ascii=False, indent=2),
+        json.dumps(result_to_dict(result, summary_generation, extra=extra_log), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     if source_path is None:
@@ -273,6 +297,35 @@ def build_summary_generation(
         )
 
 
+def build_feedback_analysis(
+    *,
+    dry_run: bool,
+    previous_text: str,
+    original_requirements: str,
+    feedback: str,
+    reviewer_settings,
+) -> str:
+    if dry_run:
+        return dry_run_feedback_analysis(feedback)
+    try:
+        return generate_llm_feedback_analysis(
+            previous_text=previous_text,
+            original_requirements=original_requirements,
+            feedback=feedback,
+            reviewer_settings=reviewer_settings,
+        )
+    except Exception as exc:
+        return "\n".join(
+            [
+                "反馈分析模型调用失败，已回退为直接使用用户反馈。",
+                f"失败原因：{exc}",
+                "",
+                "给 writer 的整体重写指令：",
+                feedback.strip(),
+            ]
+        )
+
+
 def choose_project_title(
     args,
     *,
@@ -298,6 +351,121 @@ def choose_project_title(
         except Exception:
             pass
     return fallback_project_title(source_path, source_text, requirements)
+
+
+def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
+    project_dir = Path(args.continue_project)
+    if not project_dir.exists():
+        raise SystemExit(f"project directory not found: {project_dir}")
+
+    inputs_dir = project_dir / "inputs"
+    feedback_path = inputs_dir / "feedback.md"
+    feedback = read_feedback(feedback_path)
+    requirements_path = find_project_requirements_path(inputs_dir)
+    original_requirements = read_required_text(requirements_path, "requirements")
+    output_root = project_dir / ("dry_run_outputs" if args.dry_run else "outputs")
+    previous_output_dir = find_latest_output_dir(output_root)
+    previous_final_md = previous_output_dir / "final.md"
+    previous_final_docx = previous_output_dir / "final.docx"
+    if previous_final_md.exists():
+        previous_text = previous_final_md.read_text(encoding="utf-8").strip()
+    elif previous_final_docx.exists():
+        previous_text = read_source_text(previous_final_docx).strip()
+    else:
+        raise SystemExit(f"previous final.md/final.docx not found under: {previous_output_dir}")
+    if not previous_text:
+        raise SystemExit(f"previous final draft is empty: {previous_output_dir}")
+
+    feedback_analysis = build_feedback_analysis(
+        dry_run=args.dry_run,
+        previous_text=previous_text,
+        original_requirements=original_requirements,
+        feedback=feedback,
+        reviewer_settings=reviewer_settings,
+    )
+    requirements = build_continue_requirements(
+        original_requirements=original_requirements,
+        feedback=feedback,
+        feedback_analysis=feedback_analysis,
+    )
+    request = RevisionRequest(
+        source_text=previous_text,
+        requirements=requirements,
+        cycles=args.cycles,
+        title=project_dir.name,
+        source_path=str(previous_final_docx if previous_final_docx.exists() else previous_final_md),
+    )
+
+    if args.dry_run:
+        result = run_revision_loop(
+            request,
+            writer=dry_run_writer,
+            reviewer=dry_run_reviewer,
+        )
+    else:
+        from .autogen_runner import run_autogen_revision_loop
+
+        result = run_autogen_revision_loop(
+            request,
+            writer_settings=writer_settings,
+            reviewer_settings=reviewer_settings,
+            writer_prompt_path=args.writer_prompt,
+            reviewer_prompt_path=args.reviewer_prompt,
+        )
+
+    summary_generation = build_summary_generation(
+        result,
+        mode=args.summary_mode,
+        reviewer_settings=reviewer_settings,
+    )
+
+    session_dir = output_root / f"{datetime.now().strftime('%H%M%S')}-continue"
+    previous_version_dir = next_version_dir(session_dir)
+    copy_previous_version(previous_output_dir, previous_version_dir)
+    current_version_dir = next_version_dir(session_dir)
+    source_reference = previous_final_docx if previous_final_docx.exists() else None
+    extra_log = {
+        "is_continue": True,
+        "feedback_path": str(feedback_path),
+        "feedback_analysis": feedback_analysis,
+        "previous_output_dir": str(previous_output_dir),
+        "previous_version": previous_version_dir.name,
+        "current_version": current_version_dir.name,
+    }
+    write_outputs(
+        result,
+        current_version_dir,
+        source_path=source_reference,
+        summary_generation=summary_generation,
+        extra_log=extra_log,
+    )
+    write_session_status(session_dir, status="continue", current_version=current_version_dir.name)
+    write_session_status(current_version_dir, status="continue", current_version=current_version_dir.name)
+
+    latest_dir = output_root / "latest"
+    written_dirs = [current_version_dir]
+    skipped_dirs = []
+    if prepare_output_dir(latest_dir):
+        write_outputs(
+            result,
+            latest_dir,
+            source_path=source_reference,
+            summary_generation=summary_generation,
+            extra_log=extra_log,
+        )
+        write_session_status(latest_dir, status="continue", current_version=current_version_dir.name)
+        written_dirs.append(latest_dir)
+    else:
+        skipped_dirs.append(latest_dir)
+    write_latest_session(output_root, current_version_dir)
+    print("Wrote continued revision outputs to " + ", ".join(str(path) for path in written_dirs))
+    if skipped_dirs:
+        print(
+            "Skipped locked output directories: "
+            + ", ".join(str(path) for path in skipped_dirs)
+            + ". Close any open files there before refreshing latest."
+        )
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -329,6 +497,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"[{status}] {result.role} model={result.model}: {result.message}")
         return 0 if all(result.ok for result in results) else 1
 
+    if args.continue_project:
+        return run_continue_project(
+            args,
+            writer_settings=writer_settings,
+            reviewer_settings=reviewer_settings,
+        )
+
     source_path = resolve_source_path(args.source)
     requirements_path = resolve_requirements_path(args.requirements)
     meeting_notes_path = resolve_meeting_notes_path(args.meeting_notes)
@@ -358,6 +533,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             requirements_path=requirements_path,
             meeting_notes_path=meeting_notes_path,
         )
+        ensure_feedback_template(project_context.inputs_dir)
 
     request = RevisionRequest(
         source_text=source_text,

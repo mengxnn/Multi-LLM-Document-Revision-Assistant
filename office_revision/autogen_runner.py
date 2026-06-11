@@ -347,6 +347,60 @@ def generate_llm_project_title(
     )
 
 
+async def _generate_llm_feedback_analysis_async(
+    *,
+    previous_text: str,
+    original_requirements: str,
+    feedback: str,
+    reviewer_settings: ModelSettings,
+) -> str:
+    AssistantAgent, OpenAIChatCompletionClient = _optional_imports()
+    reviewer_client = _model_client(OpenAIChatCompletionClient, reviewer_settings)
+    feedback_agent = AssistantAgent(
+        name="feedback_analyst",
+        model_client=reviewer_client,
+        system_message=(
+            "你是办公文档修订流程中的反馈分析助手。"
+            "你的任务是把用户对上一版修改稿的反馈整理成 writer 可以直接执行的整体重写指令。"
+            "不要重写全文，只输出清晰、可执行的分析和指令。"
+        ),
+    )
+    try:
+        result = await feedback_agent.run(
+            task=(
+                "请根据以下材料整理反馈分析。输出结构固定为：\n"
+                "一、需要保留的内容\n"
+                "二、需要重写或加强的内容\n"
+                "三、整体风格与结构调整\n"
+                "四、不能割裂处理的关联点\n"
+                "五、给 writer 的整体重写指令\n\n"
+                f"【上一版修改稿】\n{previous_text[:4000]}\n\n"
+                f"【原始修改要求】\n{original_requirements[:2000]}\n\n"
+                f"【用户本轮反馈】\n{feedback[:2000]}"
+            )
+        )
+        return _message_content(result).strip()
+    finally:
+        await reviewer_client.close()
+
+
+def generate_llm_feedback_analysis(
+    *,
+    previous_text: str,
+    original_requirements: str,
+    feedback: str,
+    reviewer_settings: ModelSettings,
+) -> str:
+    return asyncio.run(
+        _generate_llm_feedback_analysis_async(
+            previous_text=previous_text,
+            original_requirements=original_requirements,
+            feedback=feedback,
+            reviewer_settings=reviewer_settings,
+        )
+    )
+
+
 def _llm_summary_markdown_from_response(result: RevisionResult, response: str) -> str:
     polish = parse_llm_summary_polish(response)
     return build_llm_polished_changes_summary(result, polish)
