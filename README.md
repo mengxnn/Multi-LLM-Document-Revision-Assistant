@@ -135,12 +135,12 @@ dry-run 测试：
 continue 会读取上一版 `latest/final.md` 或 `latest/final.docx`，结合 `inputs/feedback.md` 进行整体重写，并输出到：
 
 ```text
-projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-continue>/
-  v1/   上一版结果备份
-  v2/   根据反馈生成的新版本
+projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-continue-v2>/
 ```
 
-如果使用 `-DryRun`，结果会输出到 `dry_run_outputs/<HHMMSS-continue>/`。
+其中初次生成结果通常是 `<HHMMSS-pending-v1>`，第一次 continue 是 `<HHMMSS-continue-v2>`，后续依次为 `v3`、`v4`。
+
+如果使用 `-DryRun`，结果会输出到 `dry_run_outputs/<HHMMSS-continue-v2>/`。
 
 ## 3. 运行
 
@@ -203,14 +203,14 @@ projects/<项目名_YYYYMMDD>/
 dry-run 输出到：
 
 ```text
-projects/<项目名_YYYYMMDD>/dry_run_outputs/<HHMMSS-pending>
+projects/<项目名_YYYYMMDD>/dry_run_outputs/<HHMMSS-pending-v1>
 projects/<项目名_YYYYMMDD>/dry_run_outputs/latest
 ```
 
 真实模型输出到：
 
 ```text
-projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-pending>
+projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-pending-v1>
 projects/<项目名_YYYYMMDD>/outputs/latest
 ```
 

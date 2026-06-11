@@ -124,14 +124,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             main.__globals__["default_run_output_dirs"](dry_run_args, "093000", project_dir=project_dir),
             [
-                Path("projects/Project_20260611/dry_run_outputs/093000-pending"),
+                Path("projects/Project_20260611/dry_run_outputs/093000-pending-v1"),
                 Path("projects/Project_20260611/dry_run_outputs/latest"),
             ],
         )
         self.assertEqual(
             main.__globals__["default_run_output_dirs"](real_args, "093000", project_dir=project_dir),
             [
-                Path("projects/Project_20260611/outputs/093000-pending"),
+                Path("projects/Project_20260611/outputs/093000-pending-v1"),
                 Path("projects/Project_20260611/outputs/latest"),
             ],
         )
@@ -145,7 +145,7 @@ class CliTests(unittest.TestCase):
         self.addCleanup(temp_dir.cleanup)
         root = Path(temp_dir.name)
         latest = root / "projects" / "Project_20260611" / "outputs" / "latest"
-        timestamped = root / "projects" / "Project_20260611" / "outputs" / "093000-pending"
+        timestamped = root / "projects" / "Project_20260611" / "outputs" / "093000-pending-v1"
 
         latest.mkdir(parents=True, exist_ok=True)
         with patch("office_revision.cli.shutil.rmtree", side_effect=PermissionError("locked")):

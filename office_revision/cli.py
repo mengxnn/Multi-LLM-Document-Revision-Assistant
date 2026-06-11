@@ -11,13 +11,14 @@ from typing import Sequence
 from .config import load_env_file, load_role_settings, merged_env_values
 from .continue_flow import (
     build_continue_requirements,
-    copy_previous_version,
     dry_run_feedback_analysis,
     ensure_feedback_template,
     find_latest_output_dir,
     find_project_requirements_path,
-    next_version_dir,
     read_feedback,
+    next_output_version,
+    version_label_from_output_dir,
+    versioned_output_dir,
 )
 from .document_io import read_source_text, write_final_docx
 from .dry_run import dry_run_reviewer, dry_run_writer
@@ -219,7 +220,7 @@ def default_run_output_dirs(
     if project_dir is None:
         project_dir = Path("projects") / f"document_{datetime.now().strftime('%Y%m%d')}"
     base_dir = project_dir / ("dry_run_outputs" if args.dry_run else "outputs")
-    return [base_dir / f"{run_timestamp}-pending", base_dir / "latest"]
+    return [base_dir / f"{run_timestamp}-pending-v1", base_dir / "latest"]
 
 
 def prepare_output_dir(output_dir: Path) -> bool:
@@ -419,18 +420,23 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
         reviewer_settings=reviewer_settings,
     )
 
-    session_dir = output_root / f"{datetime.now().strftime('%H%M%S')}-continue"
-    previous_version_dir = next_version_dir(session_dir)
-    copy_previous_version(previous_output_dir, previous_version_dir)
-    current_version_dir = next_version_dir(session_dir)
+    current_version_number = next_output_version(output_root)
+    current_version_dir = versioned_output_dir(
+        output_root,
+        datetime.now().strftime("%H%M%S"),
+        "continue",
+        current_version_number,
+    )
+    previous_version = version_label_from_output_dir(previous_output_dir)
+    current_version = f"v{current_version_number}"
     source_reference = previous_final_docx if previous_final_docx.exists() else None
     extra_log = {
         "is_continue": True,
         "feedback_path": str(feedback_path),
         "feedback_analysis": feedback_analysis,
         "previous_output_dir": str(previous_output_dir),
-        "previous_version": previous_version_dir.name,
-        "current_version": current_version_dir.name,
+        "previous_version": previous_version,
+        "current_version": current_version,
     }
     write_outputs(
         result,
@@ -439,8 +445,7 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
         summary_generation=summary_generation,
         extra_log=extra_log,
     )
-    write_session_status(session_dir, status="continue", current_version=current_version_dir.name)
-    write_session_status(current_version_dir, status="continue", current_version=current_version_dir.name)
+    write_session_status(current_version_dir, status="continue", current_version=current_version)
 
     latest_dir = output_root / "latest"
     written_dirs = [current_version_dir]
@@ -453,7 +458,7 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
             summary_generation=summary_generation,
             extra_log=extra_log,
         )
-        write_session_status(latest_dir, status="continue", current_version=current_version_dir.name)
+        write_session_status(latest_dir, status="continue", current_version=current_version)
         written_dirs.append(latest_dir)
     else:
         skipped_dirs.append(latest_dir)
@@ -586,7 +591,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_path=source_path,
             summary_generation=summary_generation,
         )
-        write_session_status(output_dir)
+        write_session_status(output_dir, current_version="v1")
         written_dirs.append(output_dir)
     if project_context and written_dirs:
         primary_session_dir = next((path for path in written_dirs if path.name != "latest"), written_dirs[0])

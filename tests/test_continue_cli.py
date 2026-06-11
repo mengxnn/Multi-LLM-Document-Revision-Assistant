@@ -13,7 +13,7 @@ class ContinueCliTests(unittest.TestCase):
             project = root / "projects" / "Project_20260611"
             inputs = project / "inputs"
             outputs = project / "dry_run_outputs"
-            previous = outputs / "153000-pending"
+            previous = outputs / "153000-pending-v1"
             inputs.mkdir(parents=True)
             previous.mkdir(parents=True)
             (inputs / "requirements.md").write_text("Original requirements.", encoding="utf-8")
@@ -35,17 +35,16 @@ class ContinueCliTests(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            continue_sessions = list(outputs.glob("*-continue"))
+            continue_sessions = list(outputs.glob("*-continue-v2"))
             self.assertEqual(len(continue_sessions), 1)
             session = continue_sessions[0]
-            self.assertEqual((session / "v1" / "final.md").read_text(encoding="utf-8"), "Previous final draft.")
-            self.assertTrue((session / "v2" / "final.md").exists())
-            self.assertTrue((session / "v2" / "review.md").exists())
+            self.assertTrue((session / "final.md").exists())
+            self.assertTrue((session / "review.md").exists())
             self.assertTrue((outputs / "latest" / "final.md").exists())
             status = json.loads((session / "session_status.json").read_text(encoding="utf-8"))
             self.assertEqual(status["status"], "continue")
             self.assertEqual(status["current_version"], "v2")
-            run_log = json.loads((session / "v2" / "run_log.json").read_text(encoding="utf-8"))
+            run_log = json.loads((session / "run_log.json").read_text(encoding="utf-8"))
             self.assertTrue(run_log["is_continue"])
             self.assertEqual(run_log["previous_version"], "v1")
             self.assertEqual(run_log["current_version"], "v2")

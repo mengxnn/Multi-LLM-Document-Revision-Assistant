@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from pathlib import Path
 
 
@@ -72,26 +71,27 @@ def find_project_requirements_path(inputs_dir: str | Path) -> Path:
     raise SystemExit(f"requirements snapshot not found under: {root}")
 
 
-def next_version_dir(session_dir: str | Path) -> Path:
-    session = Path(session_dir)
+def next_output_version(output_root: str | Path) -> int:
+    root = Path(output_root)
     existing_numbers: list[int] = []
-    if session.exists():
-        for child in session.iterdir():
+    if root.exists():
+        for child in root.iterdir():
             if child.is_dir():
-                match = re.fullmatch(r"v(\d+)", child.name)
+                match = re.search(r"-v(\d+)$", child.name)
                 if match:
                     existing_numbers.append(int(match.group(1)))
-    return session / f"v{(max(existing_numbers) if existing_numbers else 0) + 1}"
+    return (max(existing_numbers) if existing_numbers else 0) + 1
 
 
-def copy_previous_version(previous_output_dir: str | Path, target_version_dir: str | Path) -> None:
-    source = Path(previous_output_dir)
-    target = Path(target_version_dir)
-    if not source.exists():
-        raise SystemExit(f"previous output not found: {source}")
-    if target.exists():
-        shutil.rmtree(target)
-    shutil.copytree(source, target)
+def versioned_output_dir(output_root: str | Path, timestamp: str, status: str, version: int) -> Path:
+    return Path(output_root) / f"{timestamp}-{status}-v{version}"
+
+
+def version_label_from_output_dir(output_dir: str | Path) -> str:
+    match = re.search(r"-v(\d+)$", Path(output_dir).name)
+    if not match:
+        return "unknown"
+    return f"v{match.group(1)}"
 
 
 def build_continue_requirements(
