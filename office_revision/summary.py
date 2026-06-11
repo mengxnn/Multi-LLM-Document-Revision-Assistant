@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from .document_io import write_final_docx
@@ -8,6 +10,22 @@ from .workflow import RevisionPass, RevisionResult
 
 
 ATTENTION_PATTERNS = ("需补充", "需核实", "待确认", "待补充", "TODO", "【需补充")
+SUMMARY_HEADINGS = (
+    "# 修改说明汇总",
+    "## 一、运行概况",
+    "## 二、输入材料",
+    "## 三、每轮修改与审查摘要",
+    "## 四、最终结论",
+    "## 五、需人工补充或核实事项",
+)
+
+
+@dataclass(frozen=True)
+class SummaryGeneration:
+    text: str
+    requested_mode: str = "rule"
+    used_mode: str = "rule"
+    fallback_reason: str | None = None
 
 
 def build_changes_summary(result: RevisionResult) -> str:
@@ -32,12 +50,176 @@ def build_changes_summary(result: RevisionResult) -> str:
     return "\n".join(sections).rstrip() + "\n"
 
 
-def write_changes_summary(result: RevisionResult, output_dir: str | Path) -> None:
+def write_changes_summary(
+    result: RevisionResult,
+    output_dir: str | Path,
+    summary_text: str | None = None,
+) -> None:
     target_dir = Path(output_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
-    summary = build_changes_summary(result)
+    summary = summary_text if summary_text is not None else build_changes_summary(result)
     (target_dir / "changes_summary.md").write_text(summary, encoding="utf-8")
     write_final_docx(summary, target_dir / "changes_summary.docx")
+
+
+def has_required_summary_headings(text: str) -> bool:
+    positions: list[int] = []
+    for heading in SUMMARY_HEADINGS:
+        match = re.search(rf"(?m)^{re.escape(heading)}\s*$", text)
+        if match is None:
+            return False
+        positions.append(match.start())
+    return positions == sorted(positions)
+
+
+def build_llm_summary_prompt(result: RevisionResult, rule_summary: str) -> str:
+    round_logs = "\n\n".join(
+        [
+            "\n".join(
+                [
+                    f"### 第 {item.cycle_index} 轮",
+                    f"writer 草稿：\n{item.draft}",
+                    f"reviewer 审查：\n{item.review}",
+                    f"reviewer 是否建议继续：{_continue_text(item.review_continue)}",
+                    f"reviewer 评分：{item.review_score if item.review_score is not None else '未识别'}",
+                    f"给 writer 的修改指令：{item.writer_instructions or '未识别'}",
+                ]
+            )
+            for item in result.passes
+        ]
+    )
+    return f"""请根据以下修订流程信息，只压缩长文本字段，并返回 JSON。
+
+重要规则：
+1. 不要改写运行事实，例如轮数、停止原因、输入来源、评分、是否继续修改。
+2. 不要生成完整 Markdown，总结文件的固定格式会由程序生成。
+3. 只压缩长文本字段：writer 草稿摘要、reviewer 审查摘要、给 writer 的修改指令、最终审查摘要、人工核实事项。
+4. 不要编造未出现的事实、数据、轮次、来源或结论。
+5. 每个摘要尽量控制在 1-2 句话，保留核心问题、核心修改和关键风险。
+
+请严格返回以下 JSON，不要添加 Markdown 代码块以外的解释文字：
+{{
+  "rounds": [
+    {{
+      "cycle_index": 1,
+      "writer_draft_summary": "对本轮 writer 草稿的简洁摘要",
+      "reviewer_review_summary": "对本轮 reviewer 审查意见的简洁摘要",
+      "writer_instructions_summary": "对给 writer 的修改指令的简洁摘要"
+    }}
+  ],
+  "final_review_summary": "对最终审查意见的简洁摘要",
+  "manual_attention_summary": "是否发现显式标记，以及建议人工核实的重点"
+}}
+
+最终 Markdown 必须保留这些标题，但你无需输出 Markdown：
+{chr(10).join(SUMMARY_HEADINGS)}
+
+【规则生成的参考汇总】
+{rule_summary}
+
+【输入材料】
+初稿来源：{result.request.source_path or '未提供'}
+初稿内容：
+{result.request.source_text or '未提供'}
+
+修改要求：
+{result.request.requirements}
+
+会议纪要来源：{result.request.meeting_notes_path or '未提供'}
+会议纪要内容：
+{result.request.meeting_notes or '未提供'}
+
+【每轮 writer-reviewer 记录】
+{round_logs or '未产生任何修改轮次。'}
+
+【最终稿】
+{result.final_text or '未生成最终稿。'}
+
+【最终审查】
+{result.final_review or '未生成最终审查。'}
+"""
+
+
+def parse_llm_summary_polish(text: str) -> dict:
+    content = text.strip()
+    fence_match = re.search(r"```(?:json)?\s*(.*?)```", content, flags=re.DOTALL | re.IGNORECASE)
+    if fence_match:
+        content = fence_match.group(1).strip()
+    return json.loads(content)
+
+
+def build_llm_polished_changes_summary(result: RevisionResult, polish: dict) -> str:
+    sections = [
+        "# 修改说明汇总",
+        "",
+        "## 一、运行概况",
+        *_run_overview_lines(result),
+        "",
+        "## 二、输入材料",
+        *_input_material_lines(result),
+        "",
+        "## 三、每轮修改与审查摘要",
+        *_llm_round_summary_lines(result.passes, polish),
+        "",
+        "## 四、最终结论",
+        *_llm_final_conclusion_lines(result, polish),
+        "",
+        "## 五、需人工补充或核实事项",
+        *_llm_manual_attention_lines(result, polish),
+    ]
+    return "\n".join(sections).rstrip() + "\n"
+
+
+def _llm_round_summary_lines(passes: list[RevisionPass], polish: dict) -> list[str]:
+    if not passes:
+        return ["- 未产生任何修改轮次。"]
+
+    polished_rounds = {
+        int(item.get("cycle_index")): item
+        for item in polish.get("rounds", [])
+        if isinstance(item, dict) and item.get("cycle_index") is not None
+    }
+    lines: list[str] = []
+    for item in passes:
+        polished = polished_rounds.get(item.cycle_index, {})
+        writer_summary = polished.get("writer_draft_summary") or _excerpt(item.draft)
+        reviewer_summary = polished.get("reviewer_review_summary") or _excerpt(item.review)
+        instructions_summary = polished.get("writer_instructions_summary") or (
+            _excerpt(item.writer_instructions) if item.writer_instructions else "未识别"
+        )
+        lines.extend(
+            [
+                f"### 第 {item.cycle_index} 轮",
+                f"- writer 草稿摘要：{writer_summary}",
+                f"- reviewer 审查摘要：{reviewer_summary}",
+                f"- 是否继续修改：{_continue_text(item.review_continue)}",
+                f"- reviewer 评分：{item.review_score if item.review_score is not None else '未识别'}",
+                f"- 给 writer 的修改指令：{instructions_summary}",
+                "",
+            ]
+        )
+    return lines[:-1] if lines and lines[-1] == "" else lines
+
+
+def _llm_final_conclusion_lines(result: RevisionResult, polish: dict) -> list[str]:
+    if not result.passes:
+        return ["- 未生成最终稿。"]
+
+    final_pass = result.passes[-1]
+    final_review_summary = polish.get("final_review_summary") or _excerpt(final_pass.review, limit=360)
+    return [
+        f"- 最终稿是否基本满足要求：{_final_satisfaction_text(final_pass.review_continue)}",
+        f"- 最终评分：{final_pass.review_score if final_pass.review_score is not None else '未识别'}",
+        f"- 最终审查摘要：{final_review_summary}",
+        "- 是否建议人工复核：是。自动生成内容仍需人工核对事实、数据、政策依据和格式。",
+    ]
+
+
+def _llm_manual_attention_lines(result: RevisionResult, polish: dict) -> list[str]:
+    summary = polish.get("manual_attention_summary")
+    if summary:
+        return [f"- 显式标记检查：{summary}"]
+    return [f"- 显式标记检查：{line.removeprefix('- ')}" for line in _manual_attention_lines(result)]
 
 
 def extract_manual_attention_items(final_text: str, final_review: str) -> list[str]:

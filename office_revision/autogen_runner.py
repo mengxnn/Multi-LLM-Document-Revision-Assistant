@@ -5,6 +5,11 @@ from typing import Any
 
 from .config import ModelSettings, read_optional_text
 from .review_analysis import parse_review_decision
+from .summary import (
+    build_llm_polished_changes_summary,
+    build_llm_summary_prompt,
+    parse_llm_summary_polish,
+)
 from .workflow import (
     ReviewContext,
     RevisionPass,
@@ -245,3 +250,47 @@ def run_autogen_revision_loop(
             reviewer_prompt_path=reviewer_prompt_path,
         )
     )
+
+
+async def _generate_llm_changes_summary_async(
+    result: RevisionResult,
+    *,
+    reviewer_settings: ModelSettings,
+    rule_summary: str,
+):
+    AssistantAgent, OpenAIChatCompletionClient = _optional_imports()
+    reviewer_client = _model_client(OpenAIChatCompletionClient, reviewer_settings)
+    summary_agent = AssistantAgent(
+        name="summary_reviewer",
+        model_client=reviewer_client,
+        system_message=(
+            "你是严谨的中文办公文档审查与汇总助手。"
+            "请只根据用户提供的修订记录生成修改说明汇总，"
+            "严格遵守用户要求的 Markdown 标题结构，不要编造事实。"
+        ),
+    )
+    try:
+        task_result = await summary_agent.run(task=build_llm_summary_prompt(result, rule_summary))
+        return _llm_summary_markdown_from_response(result, _message_content(task_result))
+    finally:
+        await reviewer_client.close()
+
+
+def generate_llm_changes_summary(
+    result: RevisionResult,
+    *,
+    reviewer_settings: ModelSettings,
+    rule_summary: str,
+) -> str:
+    return asyncio.run(
+        _generate_llm_changes_summary_async(
+            result,
+            reviewer_settings=reviewer_settings,
+            rule_summary=rule_summary,
+        )
+    )
+
+
+def _llm_summary_markdown_from_response(result: RevisionResult, response: str) -> str:
+    polish = parse_llm_summary_polish(response)
+    return build_llm_polished_changes_summary(result, polish)

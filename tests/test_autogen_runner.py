@@ -1,8 +1,12 @@
 import unittest
 
-from office_revision.autogen_runner import _model_client_kwargs, _run_async_revision_loop
+from office_revision.autogen_runner import (
+    _llm_summary_markdown_from_response,
+    _model_client_kwargs,
+    _run_async_revision_loop,
+)
 from office_revision.config import ModelSettings
-from office_revision.workflow import RevisionRequest
+from office_revision.workflow import RevisionPass, RevisionRequest, RevisionResult
 
 
 class AutogenRunnerTests(unittest.TestCase):
@@ -96,6 +100,50 @@ class AutogenRunnerTests(unittest.TestCase):
         self.assertEqual(len(result.passes), 1)
         self.assertTrue(result.stopped_early)
         self.assertEqual(result.stop_reason, "reviewer_requested_stop")
+
+    def test_llm_summary_markdown_from_response_preserves_rule_facts(self):
+        result = RevisionResult(
+            request=RevisionRequest(
+                source_text="source",
+                requirements="requirements",
+                cycles=5,
+                source_path="inputs/source.docx",
+            ),
+            passes=[
+                RevisionPass(
+                    cycle_index=1,
+                    draft="Long draft",
+                    review="Long review",
+                    review_continue=False,
+                    review_score=5,
+                    writer_instructions="Long instructions",
+                )
+            ],
+            stopped_early=True,
+            stop_reason="reviewer_requested_stop",
+        )
+        response = """```json
+{
+  "rounds": [
+    {
+      "cycle_index": 1,
+      "writer_draft_summary": "压缩后的草稿摘要",
+      "reviewer_review_summary": "压缩后的审查摘要",
+      "writer_instructions_summary": "压缩后的修改指令"
+    }
+  ],
+  "final_review_summary": "压缩后的最终审查",
+  "manual_attention_summary": "未发现显式标记"
+}
+```"""
+
+        summary = _llm_summary_markdown_from_response(result, response)
+
+        self.assertIn("- 计划最大轮数：5", summary)
+        self.assertIn("- 停止原因：reviewer_requested_stop", summary)
+        self.assertIn("- writer 草稿摘要：压缩后的草稿摘要", summary)
+        self.assertIn("- reviewer 评分：5", summary)
+        self.assertIn("- 最终审查摘要：压缩后的最终审查", summary)
 
 
 if __name__ == "__main__":

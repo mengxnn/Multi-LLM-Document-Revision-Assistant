@@ -145,6 +145,12 @@ class CliTests(unittest.TestCase):
 
         self.assertIsNone(args.source)
         self.assertIsNone(args.requirements)
+        self.assertEqual(args.summary_mode, "rule")
+
+    def test_accepts_llm_summary_mode(self):
+        args = main.__globals__["build_parser"]().parse_args(["--summary-mode", "llm"])
+
+        self.assertEqual(args.summary_mode, "llm")
 
     def test_docx_source_writes_round_drafts_and_reviews(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -287,6 +293,38 @@ class CliTests(unittest.TestCase):
                 )
 
             self.assertIn("requirements", str(raised.exception))
+
+    def test_llm_summary_mode_falls_back_to_rule_summary_when_generation_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            requirements = root / "requirements.md"
+            output = root / "output"
+            requirements.write_text("Write a plan.", encoding="utf-8")
+
+            with patch(
+                "office_revision.cli.generate_llm_changes_summary",
+                side_effect=RuntimeError("summary model unavailable"),
+            ):
+                exit_code = main(
+                    [
+                        "--requirements",
+                        str(requirements),
+                        "--output-dir",
+                        str(output),
+                        "--cycles",
+                        "1",
+                        "--dry-run",
+                        "--summary-mode",
+                        "llm",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((output / "changes_summary.md").exists())
+            run_log = json.loads((output / "run_log.json").read_text(encoding="utf-8"))
+            self.assertEqual(run_log["summary_mode_requested"], "llm")
+            self.assertEqual(run_log["summary_mode_used"], "rule")
+            self.assertIn("summary model unavailable", run_log["summary_fallback_reason"])
 
 
 if __name__ == "__main__":

@@ -4,7 +4,16 @@ from pathlib import Path
 
 from docx import Document
 
-from office_revision.summary import build_changes_summary, extract_manual_attention_items, write_changes_summary
+from office_revision.summary import (
+    SUMMARY_HEADINGS,
+    build_changes_summary,
+    build_llm_polished_changes_summary,
+    build_llm_summary_prompt,
+    extract_manual_attention_items,
+    has_required_summary_headings,
+    parse_llm_summary_polish,
+    write_changes_summary,
+)
 from office_revision.workflow import RevisionPass, RevisionRequest, RevisionResult
 
 
@@ -101,6 +110,136 @@ class SummaryTests(unittest.TestCase):
             self.assertTrue((output_dir / "changes_summary.docx").exists())
             document = Document(output_dir / "changes_summary.docx")
             self.assertTrue(any("修改说明汇总" in paragraph.text for paragraph in document.paragraphs))
+
+    def test_validates_required_summary_headings_in_order(self):
+        valid_summary = "\n\n".join(SUMMARY_HEADINGS)
+        invalid_summary = "\n\n".join([SUMMARY_HEADINGS[0], SUMMARY_HEADINGS[2], SUMMARY_HEADINGS[1]])
+
+        self.assertTrue(has_required_summary_headings(valid_summary))
+        self.assertFalse(has_required_summary_headings(invalid_summary))
+        self.assertFalse(has_required_summary_headings("# 修改说明汇总\n\n## 一、运行概况"))
+
+    def test_builds_llm_summary_prompt_for_compressing_long_fields_only(self):
+        result = RevisionResult(
+            request=RevisionRequest(
+                source_text="Original source.",
+                requirements="Improve timeline.",
+                meeting_notes="Meeting asked for risk controls.",
+                cycles=1,
+                source_path="inputs/source.docx",
+                meeting_notes_path="inputs/meeting_notes.md",
+            ),
+            passes=[
+                RevisionPass(
+                    cycle_index=1,
+                    draft="Final draft content.",
+                    review="是否继续修改：否\n总体评分：5\n结论说明：基本满足要求。",
+                    review_continue=False,
+                    review_score=5,
+                    writer_instructions="",
+                )
+            ],
+            stopped_early=True,
+            stop_reason="reviewer_requested_stop",
+        )
+        rule_summary = build_changes_summary(result)
+
+        prompt = build_llm_summary_prompt(result, rule_summary)
+
+        for heading in SUMMARY_HEADINGS:
+            self.assertIn(heading, prompt)
+        self.assertIn("只压缩长文本字段", prompt)
+        self.assertIn("不要改写运行事实", prompt)
+        self.assertIn("JSON", prompt)
+        self.assertIn("Original source.", prompt)
+        self.assertIn("Meeting asked for risk controls.", prompt)
+        self.assertIn("Final draft content.", prompt)
+        self.assertIn(rule_summary, prompt)
+
+    def test_builds_llm_polished_summary_with_rule_facts_and_compressed_long_fields(self):
+        result = RevisionResult(
+            request=RevisionRequest(
+                source_text="source text",
+                requirements="Improve it.",
+                cycles=5,
+                source_path="inputs/source.docx",
+            ),
+            passes=[
+                RevisionPass(
+                    cycle_index=1,
+                    draft="Original long draft.",
+                    review="Long review.",
+                    review_continue=True,
+                    review_score=3,
+                    writer_instructions="Long instructions.",
+                ),
+                RevisionPass(
+                    cycle_index=2,
+                    draft="Final draft.",
+                    review="Final review.",
+                    review_continue=False,
+                    review_score=5,
+                    writer_instructions="Polish punctuation.",
+                ),
+            ],
+            stopped_early=True,
+            stop_reason="reviewer_requested_stop",
+        )
+        polish = {
+            "rounds": [
+                {
+                    "cycle_index": 1,
+                    "writer_draft_summary": "明确了输入输出，但仍有元评论。",
+                    "reviewer_review_summary": "要求删除元评论并降低事实风险。",
+                    "writer_instructions_summary": "删除元评论，调整引用表述。",
+                },
+                {
+                    "cycle_index": 2,
+                    "writer_draft_summary": "补齐标题并完成核心修改。",
+                    "reviewer_review_summary": "认为基本满足要求。",
+                    "writer_instructions_summary": "仅需最后校对。",
+                },
+            ],
+            "final_review_summary": "最终审查认为核心要求已满足，仍需人工校对格式和事实。",
+            "manual_attention_summary": "未发现显式标记；建议人工核对事实、术语和格式。",
+        }
+
+        summary = build_llm_polished_changes_summary(result, polish)
+
+        self.assertIn("- 计划最大轮数：5", summary)
+        self.assertIn("- 实际完成轮数：2", summary)
+        self.assertIn("- 停止原因：reviewer_requested_stop", summary)
+        self.assertIn("- 初稿来源：inputs/source.docx", summary)
+        self.assertIn("- 修改要求来源：requirements.md 或命令行指定文件", summary)
+        self.assertIn("- writer 草稿摘要：明确了输入输出，但仍有元评论。", summary)
+        self.assertIn("- 是否继续修改：是", summary)
+        self.assertIn("- reviewer 评分：3", summary)
+        self.assertIn("- 最终评分：5", summary)
+        self.assertIn("- 最终审查摘要：最终审查认为核心要求已满足，仍需人工校对格式和事实。", summary)
+        self.assertIn("- 显式标记检查：未发现显式标记；建议人工核对事实、术语和格式。", summary)
+
+    def test_parses_llm_summary_polish_json_from_plain_or_fenced_response(self):
+        plain = '{"rounds": [], "final_review_summary": "ok", "manual_attention_summary": "none"}'
+        fenced = "```json\n" + plain + "\n```"
+
+        self.assertEqual(parse_llm_summary_polish(plain)["final_review_summary"], "ok")
+        self.assertEqual(parse_llm_summary_polish(fenced)["manual_attention_summary"], "none")
+
+    def test_write_changes_summary_can_use_supplied_summary_text(self):
+        result = RevisionResult(
+            request=RevisionRequest(source_text="", requirements="Write from scratch.", cycles=1),
+            passes=[],
+        )
+        supplied_summary = "\n\n".join(SUMMARY_HEADINGS) + "\n\n- LLM generated summary.\n"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            write_changes_summary(result, output_dir, summary_text=supplied_summary)
+
+            self.assertEqual(
+                (output_dir / "changes_summary.md").read_text(encoding="utf-8"),
+                supplied_summary,
+            )
 
 
 if __name__ == "__main__":

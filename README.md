@@ -126,6 +126,12 @@ REVIEWER_ENABLE_SEARCH=true
 .\scripts\run_real_docx.ps1
 ```
 
+如果希望让大模型生成修改说明汇总：
+
+```powershell
+.\scripts\run_real_docx.ps1 -SummaryMode llm
+```
+
 也可以直接运行：
 
 ```powershell
@@ -139,10 +145,16 @@ REVIEWER_ENABLE_SEARCH=true
   --source .\inputs\other.docx `
   --requirements .\inputs\other_requirements.md `
   --meeting-notes .\inputs\meeting_notes.md `
+  --summary-mode rule `
   --cycles 5
 ```
 
 其中 `--source` 和 `--meeting-notes` 都是可选的。
+
+`--summary-mode` 可选：
+
+- `rule`：默认值，用程序规则生成 `changes_summary`，稳定、不额外调用大模型。
+- `llm`：使用 reviewer 的 API、base URL、模型压缩较长的摘要字段，再由程序按固定格式生成 `changes_summary`。
 
 ## 4. 输出目录
 
@@ -174,6 +186,40 @@ run_log.json
 ```
 
 `changes_summary` 是本次运行的修改说明汇总，包含运行概况、输入材料、每轮修改与审查摘要、最终结论，以及自动识别出的“需补充 / 需核实 / 待确认 / TODO”等人工处理事项。
+
+`changes_summary` 有两种生成方式：
+
+- 默认规则生成：程序根据每轮 writer 草稿、reviewer 审查、最终稿自动整理。
+- LLM 压缩生成：运行时加 `--summary-mode llm`，由 reviewer 模型压缩较长字段，程序负责保留固定格式和运行事实。
+
+LLM 模式下，程序会固定保留以下结构：
+
+```text
+# 修改说明汇总
+## 一、运行概况
+## 二、输入材料
+## 三、每轮修改与审查摘要
+## 四、最终结论
+## 五、需人工补充或核实事项
+```
+
+其中运行概况、输入材料、轮数、评分、是否继续修改、停止原因等事实字段由程序填写，不交给大模型改写。大模型只负责压缩这些较长字段：
+
+```text
+writer 草稿摘要
+reviewer 审查摘要
+给 writer 的修改指令
+最终审查摘要
+需人工补充或核实事项
+```
+
+如果 LLM 调用失败，或返回内容无法解析，程序会自动退回规则生成，不影响最终稿输出。可在 `run_log.json` 中查看：
+
+```text
+summary_mode_requested
+summary_mode_used
+summary_fallback_reason
+```
 
 每轮结果：
 

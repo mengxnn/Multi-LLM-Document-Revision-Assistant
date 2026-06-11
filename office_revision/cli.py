@@ -11,7 +11,13 @@ from typing import Sequence
 from .config import load_env_file, load_role_settings, merged_env_values
 from .document_io import read_source_text, write_final_docx
 from .dry_run import dry_run_reviewer, dry_run_writer
-from .summary import write_changes_summary
+from .autogen_runner import generate_llm_changes_summary
+from .summary import (
+    SummaryGeneration,
+    build_changes_summary,
+    has_required_summary_headings,
+    write_changes_summary,
+)
 from .workflow import RevisionRequest, RevisionResult, run_revision_loop
 
 
@@ -71,10 +77,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Test writer and reviewer API settings, then exit.",
     )
+    parser.add_argument(
+        "--summary-mode",
+        choices=("rule", "llm"),
+        default="rule",
+        help="How to generate changes_summary.md/docx. rule is deterministic; llm uses reviewer model with rule fallback.",
+    )
     return parser
 
 
-def result_to_dict(result: RevisionResult) -> dict:
+def result_to_dict(
+    result: RevisionResult,
+    summary_generation: SummaryGeneration | None = None,
+) -> dict:
+    summary_generation = summary_generation or SummaryGeneration(text=build_changes_summary(result))
     return {
         "title": result.request.title,
         "cycles": result.request.cycles,
@@ -85,16 +101,25 @@ def result_to_dict(result: RevisionResult) -> dict:
         "meeting_notes_path": result.request.meeting_notes_path,
         "has_source": bool(result.request.source_text.strip()),
         "has_meeting_notes": bool(result.request.meeting_notes.strip()),
+        "summary_mode_requested": summary_generation.requested_mode,
+        "summary_mode_used": summary_generation.used_mode,
+        "summary_fallback_reason": summary_generation.fallback_reason,
         "passes": [asdict(item) for item in result.passes],
     }
 
 
-def write_outputs(result: RevisionResult, output_dir: Path, source_path: Path | None = None) -> None:
+def write_outputs(
+    result: RevisionResult,
+    output_dir: Path,
+    source_path: Path | None = None,
+    summary_generation: SummaryGeneration | None = None,
+) -> None:
+    summary_generation = summary_generation or SummaryGeneration(text=build_changes_summary(result))
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "final.md").write_text(result.final_text, encoding="utf-8")
     (output_dir / "review.md").write_text(result.final_review, encoding="utf-8")
     (output_dir / "run_log.json").write_text(
-        json.dumps(result_to_dict(result), ensure_ascii=False, indent=2),
+        json.dumps(result_to_dict(result, summary_generation), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     if source_path is None:
@@ -102,7 +127,7 @@ def write_outputs(result: RevisionResult, output_dir: Path, source_path: Path | 
     elif source_path.suffix.lower() == ".docx":
         write_final_docx(result.final_text, output_dir / "final.docx", reference_path=source_path)
     write_round_outputs(result, output_dir, source_path=source_path)
-    write_changes_summary(result, output_dir)
+    write_changes_summary(result, output_dir, summary_text=summary_generation.text)
 
 
 def write_round_outputs(result: RevisionResult, output_dir: Path, source_path: Path | None = None) -> None:
@@ -190,6 +215,34 @@ def read_required_text(path: Path, label: str) -> str:
     return text
 
 
+def build_summary_generation(
+    result: RevisionResult,
+    *,
+    mode: str,
+    reviewer_settings,
+) -> SummaryGeneration:
+    rule_summary = build_changes_summary(result)
+    if mode == "rule":
+        return SummaryGeneration(text=rule_summary, requested_mode="rule", used_mode="rule")
+
+    try:
+        llm_summary = generate_llm_changes_summary(
+            result,
+            reviewer_settings=reviewer_settings,
+            rule_summary=rule_summary,
+        )
+        if not has_required_summary_headings(llm_summary):
+            raise ValueError("LLM summary did not keep the required heading structure")
+        return SummaryGeneration(text=llm_summary, requested_mode="llm", used_mode="llm")
+    except Exception as exc:
+        return SummaryGeneration(
+            text=rule_summary,
+            requested_mode="llm",
+            used_mode="rule",
+            fallback_reason=str(exc),
+        )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -253,6 +306,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             reviewer_prompt_path=args.reviewer_prompt,
         )
 
+    summary_generation = build_summary_generation(
+        result,
+        mode=args.summary_mode,
+        reviewer_settings=reviewer_settings,
+    )
+
     output_dirs = default_run_output_dirs(args)
     written_dirs: list[Path] = []
     skipped_dirs: list[Path] = []
@@ -260,7 +319,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not prepare_output_dir(output_dir):
             skipped_dirs.append(output_dir)
             continue
-        write_outputs(result, output_dir, source_path=source_path)
+        write_outputs(
+            result,
+            output_dir,
+            source_path=source_path,
+            summary_generation=summary_generation,
+        )
         written_dirs.append(output_dir)
     print("Wrote revision outputs to " + ", ".join(str(path) for path in written_dirs))
     if skipped_dirs:
