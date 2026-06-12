@@ -135,6 +135,8 @@ projects/<项目名_YYYYMMDD>/inputs/feedback.md
 
 如果只传项目目录，默认基于 `latest` 继续修改；如果传具体版本目录，则基于该版本继续修改。
 
+运行 continue 前，必须在项目目录的 `inputs/feedback.md` 中填写真实反馈。如果该文件不存在、为空，或仍然是默认模板内容，程序会停止并提示先填写反馈，避免误用空反馈继续生成。
+
 dry-run 测试：
 
 ```powershell
@@ -150,6 +152,15 @@ projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-continue-v2>/
 其中初次生成结果通常是 `<HHMMSS-pending-v1>`，第一次 continue 是 `<HHMMSS-continue-v2>`，后续依次为 `v3`、`v4`。如果同一天同一项目名下重复运行，版本号会继续递增，不会一直停留在 `v1`。
 
 如果使用 `-DryRun`，结果会输出到 `dry_run_outputs/<HHMMSS-continue-v2>/`。
+
+每次生成新版本后，终端会提示：
+
+```text
+使用下面的命令进行状态标记：
+.\scripts\review_project.ps1 -ProjectDir "..."
+```
+
+可以用这条命令把新版本标记为 `accept`、`continue`、`abandon` 或 `skip`。
 
 ## 9. 选择采纳、放弃或暂不处理
 

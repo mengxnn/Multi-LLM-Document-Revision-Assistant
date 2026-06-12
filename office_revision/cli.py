@@ -263,6 +263,11 @@ def prepare_output_dir(output_dir: Path) -> bool:
     return True
 
 
+def print_review_command(output_dir: Path) -> None:
+    print("使用下面的命令进行状态标记：")
+    print(f'.\\scripts\\review_project.ps1 -ProjectDir "{output_dir}"')
+
+
 def resolve_requirements_path(path_arg: str | None) -> Path:
     return Path(path_arg) if path_arg else DEFAULT_INPUT_DIR / "requirements.md"
 
@@ -495,6 +500,7 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
         skipped_dirs.append(latest_dir)
     write_latest_session(output_root, current_version_dir)
     print("Wrote continued revision outputs to " + ", ".join(str(path) for path in written_dirs))
+    print_review_command(current_version_dir)
     if skipped_dirs:
         print(
             "Skipped locked output directories: "
@@ -657,6 +663,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_root = project_context.dry_run_outputs_dir if args.dry_run else project_context.outputs_dir
         write_latest_session(output_root, primary_session_dir)
     print("Wrote revision outputs to " + ", ".join(str(path) for path in written_dirs))
+    if project_context and written_dirs:
+        print_review_command(primary_session_dir)
     if skipped_dirs:
         print(
             "Skipped locked output directories: "

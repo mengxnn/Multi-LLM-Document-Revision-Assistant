@@ -197,6 +197,35 @@ class CliTests(unittest.TestCase):
             self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "final.md").exists())
             self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "session_status.json").exists())
 
+    def test_default_dry_run_prints_review_command_for_new_version(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "inputs"
+            projects = root / "projects"
+            inputs.mkdir()
+            (inputs / "source.md").write_text("Markdown source text.", encoding="utf-8")
+            (inputs / "requirements.md").write_text("Improve it.", encoding="utf-8")
+
+            with patch("office_revision.cli.DEFAULT_INPUT_DIR", inputs), patch("builtins.print") as print_mock:
+                exit_code = main(
+                    [
+                        "--projects-root",
+                        str(projects),
+                        "--project-title",
+                        "Project Plan",
+                        "--cycles",
+                        "1",
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            project_dir = next(projects.glob("Project_Plan_*"))
+            session_dir = next((project_dir / "dry_run_outputs").glob("*-pending-v1"))
+            printed = "\n".join(str(call.args[0]) for call in print_mock.call_args_list)
+            self.assertIn("使用下面的命令进行状态标记", printed)
+            self.assertIn(f'-ProjectDir "{session_dir}"', printed)
+
     def test_default_dry_run_increments_version_in_existing_project_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

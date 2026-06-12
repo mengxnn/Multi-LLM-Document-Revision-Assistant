@@ -2,8 +2,10 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from office_revision.cli import main
+from office_revision.continue_flow import FEEDBACK_TEMPLATE
 
 
 class ContinueCliTests(unittest.TestCase):
@@ -59,6 +61,48 @@ class ContinueCliTests(unittest.TestCase):
                 main(["--continue-project", str(project), "--dry-run"])
 
             self.assertIn("feedback", str(raised.exception))
+
+    def test_continue_project_rejects_empty_feedback_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "projects" / "Project_20260612"
+            inputs = project / "inputs"
+            outputs = project / "dry_run_outputs"
+            previous = outputs / "153000-pending-v1"
+            inputs.mkdir(parents=True)
+            previous.mkdir(parents=True)
+            (inputs / "requirements.md").write_text("Original requirements.", encoding="utf-8")
+            (inputs / "feedback.md").write_text("  \n", encoding="utf-8")
+            (previous / "final.md").write_text("Previous final draft.", encoding="utf-8")
+            (outputs / "latest_session.json").write_text(
+                json.dumps({"session_dir": str(previous)}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(SystemExit) as raised:
+                main(["--continue-project", str(project), "--cycles", "1"])
+
+            self.assertIn("feedback", str(raised.exception))
+
+    def test_continue_project_rejects_default_feedback_template(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "projects" / "Project_20260612"
+            inputs = project / "inputs"
+            outputs = project / "dry_run_outputs"
+            previous = outputs / "153000-pending-v1"
+            inputs.mkdir(parents=True)
+            previous.mkdir(parents=True)
+            (inputs / "requirements.md").write_text("Original requirements.", encoding="utf-8")
+            (inputs / "feedback.md").write_text(FEEDBACK_TEMPLATE, encoding="utf-8")
+            (previous / "final.md").write_text("Previous final draft.", encoding="utf-8")
+            (outputs / "latest_session.json").write_text(
+                json.dumps({"session_dir": str(previous)}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(SystemExit) as raised:
+                main(["--continue-project", str(project), "--cycles", "1"])
+
+            self.assertIn("default feedback template", str(raised.exception))
 
     def test_continue_project_auto_detects_dry_run_outputs(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -122,6 +166,31 @@ class ContinueCliTests(unittest.TestCase):
             run_log = json.loads((new_sessions[0] / "run_log.json").read_text(encoding="utf-8"))
             self.assertEqual(run_log["previous_output_dir"], str(older))
             self.assertIn("Older final draft.", (new_sessions[0] / "final.md").read_text(encoding="utf-8"))
+
+    def test_continue_project_prints_review_command_for_new_version(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "projects" / "Project_20260612"
+            inputs = project / "inputs"
+            outputs = project / "dry_run_outputs"
+            previous = outputs / "153000-pending-v1"
+            inputs.mkdir(parents=True)
+            previous.mkdir(parents=True)
+            (inputs / "requirements.md").write_text("Original requirements.", encoding="utf-8")
+            (inputs / "feedback.md").write_text("Make it clearer.", encoding="utf-8")
+            (previous / "final.md").write_text("Previous final draft.", encoding="utf-8")
+            (outputs / "latest_session.json").write_text(
+                json.dumps({"session_dir": str(previous)}),
+                encoding="utf-8",
+            )
+
+            with patch("builtins.print") as print_mock:
+                exit_code = main(["--continue-project", str(project), "--cycles", "1"])
+
+            self.assertEqual(exit_code, 0)
+            new_session = next(outputs.glob("*-continue-v2"))
+            printed = "\n".join(str(call.args[0]) for call in print_mock.call_args_list)
+            self.assertIn("使用下面的命令进行状态标记", printed)
+            self.assertIn(f'-ProjectDir "{new_session}"', printed)
 
 
 if __name__ == "__main__":

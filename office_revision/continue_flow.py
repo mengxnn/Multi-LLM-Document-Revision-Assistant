@@ -33,11 +33,20 @@ def ensure_feedback_template(inputs_dir: str | Path) -> Path:
 def read_feedback(feedback_path: str | Path) -> str:
     path = Path(feedback_path)
     if not path.exists():
-        raise SystemExit(f"feedback file not found: {path}")
+        raise SystemExit(f"feedback file not found: {path}. Please create it and write your revision feedback.")
     text = path.read_text(encoding="utf-8").strip()
     if not text:
-        raise SystemExit(f"feedback file is empty: {path}")
+        raise SystemExit(f"feedback file is empty: {path}. Please write your revision feedback before continuing.")
+    if _normalize_feedback(text) == _normalize_feedback(FEEDBACK_TEMPLATE):
+        raise SystemExit(
+            f"feedback file still contains the default feedback template: {path}. "
+            "Please replace it with your actual revision feedback before continuing."
+        )
     return text
+
+
+def _normalize_feedback(text: str) -> str:
+    return re.sub(r"\s+", "", text)
 
 
 def find_latest_output_dir(output_root: str | Path) -> Path:
