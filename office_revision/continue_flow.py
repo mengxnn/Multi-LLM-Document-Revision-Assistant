@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -13,6 +14,13 @@ FEEDBACK_TEMPLATE = """# 本轮反馈
 - 风格、语气或结构要求
 - 需要补充、删除或核实的内容
 """
+
+
+@dataclass(frozen=True)
+class ContinueTarget:
+    project_dir: Path
+    output_root: Path
+    previous_output_dir: Path
 
 
 def ensure_feedback_template(inputs_dir: str | Path) -> Path:
@@ -48,6 +56,55 @@ def find_latest_output_dir(output_root: str | Path) -> Path:
     if latest.exists():
         return latest
     raise SystemExit(f"latest output not found under: {root}")
+
+
+def resolve_continue_target(path: str | Path, *, dry_run: bool) -> ContinueTarget:
+    target = Path(path)
+    if not target.exists():
+        raise SystemExit(f"project or version directory not found: {target}")
+
+    if _is_version_output_dir(target):
+        output_root = target.parent
+        project_dir = output_root.parent
+        if output_root.name not in {"outputs", "dry_run_outputs"}:
+            raise SystemExit(
+                "version directory must be inside an outputs or dry_run_outputs directory: "
+                f"{target}"
+            )
+        return ContinueTarget(
+            project_dir=project_dir,
+            output_root=output_root,
+            previous_output_dir=target,
+        )
+
+    project_dir = target
+    output_root = _resolve_project_output_root(project_dir, dry_run=dry_run)
+    return ContinueTarget(
+        project_dir=project_dir,
+        output_root=output_root,
+        previous_output_dir=find_latest_output_dir(output_root),
+    )
+
+
+def _is_version_output_dir(path: Path) -> bool:
+    return path.is_dir() and re.search(r"-(pending|accept|continue|abandon)-v\d+$", path.name) is not None
+
+
+def _resolve_project_output_root(project_dir: Path, *, dry_run: bool) -> Path:
+    if dry_run:
+        return project_dir / "dry_run_outputs"
+
+    real_root = project_dir / "outputs"
+    dry_root = project_dir / "dry_run_outputs"
+    if _has_latest_output(real_root):
+        return real_root
+    if _has_latest_output(dry_root):
+        return dry_root
+    return real_root
+
+
+def _has_latest_output(output_root: Path) -> bool:
+    return (output_root / "latest_session.json").exists() or (output_root / "latest").exists()
 
 
 def find_project_requirements_path(inputs_dir: str | Path) -> Path:

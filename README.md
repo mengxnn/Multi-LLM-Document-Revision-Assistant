@@ -126,6 +126,15 @@ projects/<项目名_YYYYMMDD>/inputs/feedback.md
 .\scripts\continue_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>"
 ```
 
+也可以直接指定某个历史版本目录，适合用 Tab 补全选择基于哪一版继续：
+
+```powershell
+.\scripts\continue_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>\outputs\<HHMMSS-pending-v1>"
+.\scripts\continue_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>\dry_run_outputs\<HHMMSS-pending-v1>"
+```
+
+如果只传项目目录，默认基于 `latest` 继续修改；如果传具体版本目录，则基于该版本继续修改。
+
 dry-run 测试：
 
 ```powershell

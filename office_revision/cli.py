@@ -17,6 +17,7 @@ from .continue_flow import (
     find_project_requirements_path,
     read_feedback,
     next_output_version,
+    resolve_continue_target,
     version_label_from_output_dir,
     versioned_output_dir,
 )
@@ -385,18 +386,17 @@ def choose_project_title(
 
 
 def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
-    project_dir = Path(args.continue_project)
-    if not project_dir.exists():
-        raise SystemExit(f"project directory not found: {project_dir}")
+    target = resolve_continue_target(args.continue_project, dry_run=args.dry_run)
+    project_dir = target.project_dir
 
     inputs_dir = project_dir / "inputs"
     feedback_path = inputs_dir / "feedback.md"
     feedback = read_feedback(feedback_path)
     requirements_path = find_project_requirements_path(inputs_dir)
     original_requirements = read_required_text(requirements_path, "requirements")
-    output_root = resolve_project_output_root(project_dir, dry_run=args.dry_run)
+    output_root = target.output_root
     use_dry_run = args.dry_run or output_root.name == "dry_run_outputs"
-    previous_output_dir = find_latest_output_dir(output_root)
+    previous_output_dir = target.previous_output_dir
     previous_final_md = previous_output_dir / "final.md"
     previous_final_docx = previous_output_dir / "final.docx"
     if previous_final_md.exists():
@@ -409,7 +409,7 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
         raise SystemExit(f"previous final draft is empty: {previous_output_dir}")
 
     feedback_analysis = build_feedback_analysis(
-        dry_run=args.dry_run,
+        dry_run=use_dry_run,
         previous_text=previous_text,
         original_requirements=original_requirements,
         feedback=feedback,

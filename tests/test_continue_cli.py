@@ -88,6 +88,41 @@ class ContinueCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertTrue(list(outputs.glob("*-continue-v2")))
 
+    def test_continue_project_can_start_from_specific_version_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "projects" / "Project_20260612"
+            inputs = project / "inputs"
+            outputs = project / "dry_run_outputs"
+            older = outputs / "153000-pending-v1"
+            latest = outputs / "160000-continue-v2"
+            inputs.mkdir(parents=True)
+            older.mkdir(parents=True)
+            latest.mkdir()
+            (inputs / "requirements.md").write_text("Original requirements.", encoding="utf-8")
+            (inputs / "feedback.md").write_text("Use the older version as the base.", encoding="utf-8")
+            (older / "final.md").write_text("Older final draft.", encoding="utf-8")
+            (latest / "final.md").write_text("Latest final draft.", encoding="utf-8")
+            (outputs / "latest_session.json").write_text(
+                json.dumps({"session_dir": str(latest)}),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "--continue-project",
+                    str(older),
+                    "--cycles",
+                    "1",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            new_sessions = list(outputs.glob("*-continue-v3"))
+            self.assertEqual(len(new_sessions), 1)
+            run_log = json.loads((new_sessions[0] / "run_log.json").read_text(encoding="utf-8"))
+            self.assertEqual(run_log["previous_output_dir"], str(older))
+            self.assertIn("Older final draft.", (new_sessions[0] / "final.md").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

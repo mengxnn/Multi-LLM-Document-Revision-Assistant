@@ -8,6 +8,7 @@ from office_revision.continue_flow import (
     find_latest_output_dir,
     find_project_requirements_path,
     next_output_version,
+    resolve_continue_target,
     versioned_output_dir,
 )
 
@@ -42,6 +43,35 @@ class ContinueFlowTests(unittest.TestCase):
             versioned_output_dir(Path("outputs"), "160000", "continue", 2),
             Path("outputs/160000-continue-v2"),
         )
+
+    def test_resolve_continue_target_accepts_project_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "Project_20260612"
+            output_root = project / "outputs"
+            session = output_root / "153000-pending-v1"
+            session.mkdir(parents=True)
+            (output_root / "latest_session.json").write_text(
+                json.dumps({"session_dir": str(session)}),
+                encoding="utf-8",
+            )
+
+            target = resolve_continue_target(project, dry_run=False)
+
+            self.assertEqual(target.project_dir, project)
+            self.assertEqual(target.output_root, output_root)
+            self.assertEqual(target.previous_output_dir, session)
+
+    def test_resolve_continue_target_accepts_version_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "Project_20260612"
+            session = project / "dry_run_outputs" / "153000-pending-v1"
+            session.mkdir(parents=True)
+
+            target = resolve_continue_target(session, dry_run=False)
+
+            self.assertEqual(target.project_dir, project)
+            self.assertEqual(target.output_root, project / "dry_run_outputs")
+            self.assertEqual(target.previous_output_dir, session)
 
     def test_finds_project_requirements_snapshot_with_custom_name(self):
         with tempfile.TemporaryDirectory() as temp_dir:
