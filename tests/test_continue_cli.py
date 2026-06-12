@@ -60,6 +60,34 @@ class ContinueCliTests(unittest.TestCase):
 
             self.assertIn("feedback", str(raised.exception))
 
+    def test_continue_project_auto_detects_dry_run_outputs(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "projects" / "Project_20260612"
+            inputs = project / "inputs"
+            outputs = project / "dry_run_outputs"
+            previous = outputs / "153000-pending-v1"
+            inputs.mkdir(parents=True)
+            previous.mkdir(parents=True)
+            (inputs / "requirements.md").write_text("Original requirements.", encoding="utf-8")
+            (inputs / "feedback.md").write_text("Make it clearer.", encoding="utf-8")
+            (previous / "final.md").write_text("Previous final draft.", encoding="utf-8")
+            (outputs / "latest_session.json").write_text(
+                json.dumps({"session_dir": str(previous)}),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "--continue-project",
+                    str(project),
+                    "--cycles",
+                    "1",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(list(outputs.glob("*-continue-v2")))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,6 +20,7 @@ from .continue_flow import (
     version_label_from_output_dir,
     versioned_output_dir,
 )
+from .decision_flow import apply_session_decision, read_interactive_decision
 from .document_io import read_source_text, write_final_docx
 from .dry_run import dry_run_reviewer, dry_run_writer
 from .project_manager import (
@@ -80,6 +81,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--continue-project",
         default=None,
         help="Continue revising an existing projects/<project> directory using inputs/feedback.md.",
+    )
+    parser.add_argument(
+        "--review-project",
+        default=None,
+        help="Choose accept, abandon, or skip for the latest pending result in a project directory.",
+    )
+    parser.add_argument(
+        "--decision",
+        choices=("accept", "continue", "abandon", "skip"),
+        default=None,
+        help="Decision used with --review-project. If omitted, an interactive prompt is shown.",
     )
     parser.add_argument(
         "--project-title",
@@ -213,6 +225,7 @@ def default_run_output_dirs(
     timestamp: str | None = None,
     *,
     project_dir: Path | None = None,
+    version: int = 1,
 ) -> list[Path]:
     if args.output_dir:
         return [Path(args.output_dir)]
@@ -220,7 +233,24 @@ def default_run_output_dirs(
     if project_dir is None:
         project_dir = Path("projects") / f"document_{datetime.now().strftime('%Y%m%d')}"
     base_dir = project_dir / ("dry_run_outputs" if args.dry_run else "outputs")
-    return [base_dir / f"{run_timestamp}-pending-v1", base_dir / "latest"]
+    return [base_dir / f"{run_timestamp}-pending-v{version}", base_dir / "latest"]
+
+
+def resolve_project_output_root(project_dir: Path, *, dry_run: bool) -> Path:
+    if dry_run:
+        return project_dir / "dry_run_outputs"
+
+    real_root = project_dir / "outputs"
+    dry_root = project_dir / "dry_run_outputs"
+    if _has_latest_output(real_root):
+        return real_root
+    if _has_latest_output(dry_root):
+        return dry_root
+    return real_root
+
+
+def _has_latest_output(output_root: Path) -> bool:
+    return (output_root / "latest_session.json").exists() or (output_root / "latest").exists()
 
 
 def prepare_output_dir(output_dir: Path) -> bool:
@@ -364,7 +394,8 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
     feedback = read_feedback(feedback_path)
     requirements_path = find_project_requirements_path(inputs_dir)
     original_requirements = read_required_text(requirements_path, "requirements")
-    output_root = project_dir / ("dry_run_outputs" if args.dry_run else "outputs")
+    output_root = resolve_project_output_root(project_dir, dry_run=args.dry_run)
+    use_dry_run = args.dry_run or output_root.name == "dry_run_outputs"
     previous_output_dir = find_latest_output_dir(output_root)
     previous_final_md = previous_output_dir / "final.md"
     previous_final_docx = previous_output_dir / "final.docx"
@@ -397,7 +428,7 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
         source_path=str(previous_final_docx if previous_final_docx.exists() else previous_final_md),
     )
 
-    if args.dry_run:
+    if use_dry_run:
         result = run_revision_loop(
             request,
             writer=dry_run_writer,
@@ -473,6 +504,17 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
     return 0
 
 
+def run_review_project(args) -> int:
+    project_dir = Path(args.review_project)
+    if not project_dir.exists():
+        raise SystemExit(f"project directory not found: {project_dir}")
+    output_root = resolve_project_output_root(project_dir, dry_run=args.dry_run)
+    decision = args.decision or read_interactive_decision(project_dir)
+    result = apply_session_decision(output_root, decision)
+    print(result.message)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -501,6 +543,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             status = "OK" if result.ok else "FAIL"
             print(f"[{status}] {result.role} model={result.model}: {result.message}")
         return 0 if all(result.ok for result in results) else 1
+
+    if args.review_project:
+        return run_review_project(args)
 
     if args.continue_project:
         return run_continue_project(
@@ -578,6 +623,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         args,
         run_time,
         project_dir=project_context.project_dir if project_context else None,
+        version=next_output_version(
+            project_context.dry_run_outputs_dir if args.dry_run else project_context.outputs_dir
+        )
+        if project_context
+        else 1,
     )
     written_dirs: list[Path] = []
     skipped_dirs: list[Path] = []

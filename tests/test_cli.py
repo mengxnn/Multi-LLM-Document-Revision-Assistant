@@ -140,6 +140,19 @@ class CliTests(unittest.TestCase):
             [Path("custom/out")],
         )
 
+        self.assertEqual(
+            main.__globals__["default_run_output_dirs"](
+                dry_run_args,
+                "093000",
+                project_dir=project_dir,
+                version=2,
+            ),
+            [
+                Path("projects/Project_20260611/dry_run_outputs/093000-pending-v2"),
+                Path("projects/Project_20260611/dry_run_outputs/latest"),
+            ],
+        )
+
     def test_locked_latest_directory_is_skipped_without_failure(self):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
@@ -183,6 +196,40 @@ class CliTests(unittest.TestCase):
             self.assertTrue((project_dir / "inputs" / "requirements.md").exists())
             self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "final.md").exists())
             self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "session_status.json").exists())
+
+    def test_default_dry_run_increments_version_in_existing_project_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "inputs"
+            projects = root / "projects"
+            existing = projects / "Project_Plan_20260612" / "dry_run_outputs" / "093000-pending-v1"
+            inputs.mkdir()
+            existing.mkdir(parents=True)
+            (inputs / "source.md").write_text("Markdown source text.", encoding="utf-8")
+            (inputs / "requirements.md").write_text("Improve it.", encoding="utf-8")
+
+            with patch("office_revision.cli.DEFAULT_INPUT_DIR", inputs), patch(
+                "office_revision.cli.datetime"
+            ) as fake_datetime:
+                fake_datetime.now.return_value.strftime.side_effect = lambda fmt: {
+                    "%Y%m%d": "20260612",
+                    "%H%M%S": "094500",
+                }[fmt]
+                exit_code = main(
+                    [
+                        "--projects-root",
+                        str(projects),
+                        "--project-title",
+                        "Project Plan",
+                        "--cycles",
+                        "1",
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            project_dir = projects / "Project_Plan_20260612"
+            self.assertTrue((project_dir / "dry_run_outputs" / "094500-pending-v2").exists())
 
     def test_choose_project_title_uses_llm_for_real_runs(self):
         args = main.__globals__["build_parser"]().parse_args(["--project-title-language", "zh"])

@@ -138,9 +138,48 @@ continue 会读取上一版 `latest/final.md` 或 `latest/final.docx`，结合 `
 projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-continue-v2>/
 ```
 
-其中初次生成结果通常是 `<HHMMSS-pending-v1>`，第一次 continue 是 `<HHMMSS-continue-v2>`，后续依次为 `v3`、`v4`。
+其中初次生成结果通常是 `<HHMMSS-pending-v1>`，第一次 continue 是 `<HHMMSS-continue-v2>`，后续依次为 `v3`、`v4`。如果同一天同一项目名下重复运行，版本号会继续递增，不会一直停留在 `v1`。
 
 如果使用 `-DryRun`，结果会输出到 `dry_run_outputs/<HHMMSS-continue-v2>/`。
+
+## 9. 选择采纳、放弃或暂不处理
+
+查看某次 `pending` 结果后，可以运行：
+
+```powershell
+.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>"
+```
+
+程序会提示选择：
+
+```text
+accept   采纳当前结果
+continue 标记为继续修改
+abandon  放弃当前结果
+skip     暂不处理，保持 pending
+```
+
+也可以直接指定：
+
+```powershell
+.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -Decision accept
+.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -Decision continue
+.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -Decision abandon
+.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -Decision skip
+```
+
+`accept`、`continue` 和 `abandon` 会把最新版本目录名里的状态标签替换成对应标签，例如：
+
+```text
+193728-pending-v1 -> 193728-accept-v1
+193728-pending-v1 -> 193728-continue-v1
+193728-pending-v1 -> 193728-abandon-v1
+193728-accept-v1 -> 193728-abandon-v1
+```
+
+选择 `continue` 后，先在项目目录的 `inputs/feedback.md` 中填写反馈，再运行 `continue_project.ps1` 生成下一版。`skip` 会把当前结果标回 `pending`，并提示之后继续选择时可以使用的命令。
+
+如果项目只有 dry-run 输出，`review_project.ps1` 和 `continue_project.ps1` 会自动使用 `dry_run_outputs`，不需要额外指定 `-DryRun`；也可以显式加 `-DryRun`。
 
 ## 3. 运行
 
