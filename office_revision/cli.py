@@ -21,7 +21,7 @@ from .continue_flow import (
     version_label_from_output_dir,
     versioned_output_dir,
 )
-from .decision_flow import apply_session_decision, read_interactive_decision
+from .decision_flow import apply_decision_to_session, apply_session_decision, read_interactive_decision
 from .document_io import read_source_text, write_final_docx
 from .dry_run import dry_run_reviewer, dry_run_writer
 from .project_manager import (
@@ -505,12 +505,21 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
 
 
 def run_review_project(args) -> int:
-    project_dir = Path(args.review_project)
-    if not project_dir.exists():
-        raise SystemExit(f"project directory not found: {project_dir}")
-    output_root = resolve_project_output_root(project_dir, dry_run=args.dry_run)
+    target = resolve_continue_target(args.review_project, dry_run=args.dry_run)
+    project_dir = target.project_dir
+    output_root = target.output_root
     decision = args.decision or read_interactive_decision(project_dir)
-    result = apply_session_decision(output_root, decision)
+    input_path = Path(args.review_project)
+    if input_path == target.previous_output_dir:
+        result = apply_decision_to_session(
+            output_root,
+            target.previous_output_dir,
+            decision,
+            prefer_session_command=True,
+            update_latest=False,
+        )
+    else:
+        result = apply_session_decision(output_root, decision)
     print(result.message)
     return 0
 

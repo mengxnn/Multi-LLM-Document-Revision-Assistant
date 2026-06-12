@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from office_revision.cli import main
 
@@ -100,6 +101,147 @@ class DecisionCliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertTrue((output_root / "193728-continue-v1").exists())
+
+    def test_review_project_can_mark_specific_version_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "projects" / "Project_20260612"
+            output_root = project / "outputs"
+            older = output_root / "153902-continue-v2"
+            latest = output_root / "160000-pending-v3"
+            older.mkdir(parents=True)
+            latest.mkdir()
+            (output_root / "latest_session.json").write_text(
+                json.dumps({"session_dir": str(latest)}),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "--review-project",
+                    str(older),
+                    "--decision",
+                    "abandon",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((output_root / "153902-abandon-v2").exists())
+            self.assertTrue(latest.exists())
+
+    def test_reviewing_specific_history_version_does_not_change_latest_pointer(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "projects" / "Project_20260612"
+            output_root = project / "outputs"
+            older = output_root / "153902-pending-v2"
+            latest = output_root / "160000-pending-v3"
+            older.mkdir(parents=True)
+            latest.mkdir()
+            (output_root / "latest_session.json").write_text(
+                json.dumps({"session_dir": str(latest)}),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "--review-project",
+                    str(older),
+                    "--decision",
+                    "accept",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            latest_session = json.loads((output_root / "latest_session.json").read_text(encoding="utf-8"))
+            self.assertEqual(Path(latest_session["session_dir"]), latest)
+
+            exit_code = main(
+                [
+                    "--review-project",
+                    str(project),
+                    "--decision",
+                    "abandon",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((output_root / "160000-abandon-v3").exists())
+
+    def test_continue_project_directory_uses_latest_after_history_version_was_marked(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "projects" / "Project_20260612"
+            inputs = project / "inputs"
+            output_root = project / "dry_run_outputs"
+            older = output_root / "153902-pending-v2"
+            latest = output_root / "160000-pending-v3"
+            inputs.mkdir(parents=True)
+            older.mkdir(parents=True)
+            latest.mkdir()
+            (inputs / "requirements.md").write_text("Original requirements.", encoding="utf-8")
+            (inputs / "feedback.md").write_text("Continue latest.", encoding="utf-8")
+            (older / "final.md").write_text("Older final draft.", encoding="utf-8")
+            (latest / "final.md").write_text("Latest final draft.", encoding="utf-8")
+            (output_root / "latest_session.json").write_text(
+                json.dumps({"session_dir": str(latest)}),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                main(["--review-project", str(older), "--decision", "accept"]),
+                0,
+            )
+            self.assertEqual(
+                main(["--continue-project", str(project), "--cycles", "1"]),
+                0,
+            )
+
+            new_session = next(output_root.glob("*-continue-v4"))
+            run_log = json.loads((new_session / "run_log.json").read_text(encoding="utf-8"))
+            self.assertEqual(run_log["previous_output_dir"], str(latest))
+            self.assertIn("Latest final draft.", (new_session / "final.md").read_text(encoding="utf-8"))
+
+    def test_review_project_skip_specific_version_reminder_uses_version_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "projects" / "Project_20260612"
+            output_root = project / "outputs"
+            version = output_root / "153902-accept-v2"
+            version.mkdir(parents=True)
+
+            with patch("builtins.print") as print_mock:
+                exit_code = main(
+                    [
+                        "--review-project",
+                        str(version),
+                        "--decision",
+                        "skip",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            expected = output_root / "153902-pending-v2"
+            printed = "\n".join(str(call.args[0]) for call in print_mock.call_args_list)
+            self.assertIn(f'--review-project "{expected}"', printed)
+
+    def test_review_project_continue_specific_version_prompt_uses_version_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "projects" / "Project_20260612"
+            output_root = project / "outputs"
+            version = output_root / "153902-pending-v2"
+            version.mkdir(parents=True)
+
+            with patch("builtins.print") as print_mock:
+                exit_code = main(
+                    [
+                        "--review-project",
+                        str(version),
+                        "--decision",
+                        "continue",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            expected = output_root / "153902-continue-v2"
+            printed = "\n".join(str(call.args[0]) for call in print_mock.call_args_list)
+            self.assertIn(f'--continue-project "{expected}"', printed)
 
 
 if __name__ == "__main__":

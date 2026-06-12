@@ -159,6 +159,15 @@ projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-continue-v2>/
 .\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>"
 ```
 
+也可以直接指定某个版本目录：
+
+```powershell
+.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>\outputs\<HHMMSS-continue-v2>"
+.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>\dry_run_outputs\<HHMMSS-continue-v2>"
+```
+
+如果只传项目目录，默认处理 `latest`；如果传具体版本目录，则只标记该版本。
+
 程序会提示选择：
 
 ```text

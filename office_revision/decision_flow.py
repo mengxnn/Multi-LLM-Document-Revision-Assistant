@@ -33,6 +33,22 @@ def apply_session_decision(output_root: str | Path, decision: str) -> DecisionRe
 
     root = Path(output_root)
     session_dir = find_latest_output_dir(root)
+    return apply_decision_to_session(root, session_dir, decision)
+
+
+def apply_decision_to_session(
+    output_root: str | Path,
+    session_dir: str | Path,
+    decision: str,
+    *,
+    prefer_session_command: bool = False,
+    update_latest: bool = True,
+) -> DecisionResult:
+    if decision not in VALID_DECISIONS:
+        raise SystemExit(f"decision must be one of: {', '.join(VALID_DECISIONS)}")
+
+    root = Path(output_root)
+    session_dir = Path(session_dir)
     project_dir = root.parent
 
     if decision == "skip":
@@ -48,15 +64,17 @@ def apply_session_decision(output_root: str | Path, decision: str) -> DecisionRe
                 final_dir = session_dir
         current_version = version_label_from_output_dir(final_dir)
         write_session_status(final_dir, status="pending", current_version=current_version)
-        _write_latest_status(root, status="pending", current_version=current_version)
-        write_latest_session(root, final_dir)
+        if update_latest:
+            _write_latest_status(root, status="pending", current_version=current_version)
+            write_latest_session(root, final_dir)
+        command_target = final_dir if prefer_session_command else project_dir
         return DecisionResult(
             status="pending",
             session_dir=final_dir,
             renamed=renamed,
             message=(
                 "Skipped for now. Run this command later to choose again: "
-                f'.\\.venv\\Scripts\\python.exe .\\run_revision.py --review-project "{project_dir}"'
+                f'.\\.venv\\Scripts\\python.exe .\\run_revision.py --review-project "{command_target}"'
             ),
         )
 
@@ -73,16 +91,18 @@ def apply_session_decision(output_root: str | Path, decision: str) -> DecisionRe
 
     current_version = version_label_from_output_dir(final_dir)
     write_session_status(final_dir, status=decision, current_version=current_version)
-    _write_latest_status(root, status=decision, current_version=current_version)
-    write_latest_session(root, final_dir)
+    if update_latest:
+        _write_latest_status(root, status=decision, current_version=current_version)
+        write_latest_session(root, final_dir)
 
     message = f"Marked latest result as {decision}: {final_dir}"
     if target_dir != session_dir and not renamed:
         message += " The directory could not be renamed. Close any open files there and rename it manually if needed."
     if decision == "continue":
+        command_target = final_dir if prefer_session_command else project_dir
         message += (
             "\nFill feedback.md, then run: "
-            f'.\\.venv\\Scripts\\python.exe .\\run_revision.py --continue-project "{project_dir}"'
+            f'.\\.venv\\Scripts\\python.exe .\\run_revision.py --continue-project "{command_target}"'
         )
     return DecisionResult(status=decision, session_dir=final_dir, renamed=renamed, message=message)
 
