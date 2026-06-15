@@ -17,6 +17,7 @@ from .continue_flow import (
     find_project_requirements_path,
     read_feedback,
     next_output_version,
+    resolve_previous_final_path,
     resolve_continue_target,
     version_label_from_output_dir,
     versioned_output_dir,
@@ -30,6 +31,13 @@ from .project_manager import (
     snapshot_project_inputs,
     write_latest_session,
     write_session_status,
+)
+from .project_paths import (
+    VersionLayout,
+    source_type_from_path,
+    structured_manifest,
+    version_number_from_dir,
+    write_manifest,
 )
 from .autogen_runner import (
     generate_llm_changes_summary,
@@ -174,29 +182,56 @@ def write_outputs(
     source_path: Path | None = None,
     summary_generation: SummaryGeneration | None = None,
     extra_log: dict | None = None,
+    *,
+    mode: str = "unknown",
+    status: str | None = None,
+    parent_version: str | None = None,
 ) -> None:
     summary_generation = summary_generation or SummaryGeneration(text=build_changes_summary(result))
+    layout = VersionLayout(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "final.md").write_text(result.final_text, encoding="utf-8")
-    (output_dir / "review.md").write_text(result.final_review, encoding="utf-8")
-    (output_dir / "run_log.json").write_text(
-        json.dumps(result_to_dict(result, summary_generation, extra=extra_log), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    layout.ensure_dirs()
+    run_log_text = json.dumps(result_to_dict(result, summary_generation, extra=extra_log), ensure_ascii=False, indent=2)
+    layout.final_md.write_text(result.final_text, encoding="utf-8")
+    layout.compat_final_md.write_text(result.final_text, encoding="utf-8")
+    layout.review_md.write_text(result.final_review, encoding="utf-8")
+    layout.compat_review_md.write_text(result.final_review, encoding="utf-8")
+    layout.run_log.write_text(run_log_text, encoding="utf-8")
+    layout.compat_run_log.write_text(run_log_text, encoding="utf-8")
     if source_path is None:
-        write_final_docx(result.final_text, output_dir / "final.docx")
+        write_final_docx(result.final_text, layout.final_docx)
+        write_final_docx(result.final_text, layout.compat_final_docx)
     elif source_path.suffix.lower() == ".docx":
-        write_final_docx(result.final_text, output_dir / "final.docx", reference_path=source_path)
-    write_round_outputs(result, output_dir, source_path=source_path)
-    write_changes_summary(result, output_dir, summary_text=summary_generation.text)
+        write_final_docx(result.final_text, layout.final_docx, reference_path=source_path)
+        write_final_docx(result.final_text, layout.compat_final_docx, reference_path=source_path)
+    round_review_paths = write_round_outputs(result, output_dir, source_path=source_path)
+    write_changes_summary(result, layout.summaries_dir, summary_text=summary_generation.text)
+    if layout.summary_md.exists():
+        layout.compat_summary_md.write_text(layout.summary_md.read_text(encoding="utf-8"), encoding="utf-8")
+    if layout.summary_docx.exists():
+        layout.compat_summary_docx.write_bytes(layout.summary_docx.read_bytes())
+    write_manifest(
+        layout,
+        structured_manifest(
+            layout,
+            project_name=result.request.title or output_dir.parent.parent.name,
+            version=version_number_from_dir(output_dir),
+            status=status,
+            mode=mode,
+            source_type=source_type_from_path(source_path),
+            round_review_paths=round_review_paths,
+            parent_version=parent_version,
+        ),
+    )
 
 
-def write_round_outputs(result: RevisionResult, output_dir: Path, source_path: Path | None = None) -> None:
+def write_round_outputs(result: RevisionResult, output_dir: Path, source_path: Path | None = None) -> list[Path]:
     drafts_dir = output_dir / "drafts"
     reviews_dir = output_dir / "reviews"
     drafts_dir.mkdir(parents=True, exist_ok=True)
     reviews_dir.mkdir(parents=True, exist_ok=True)
     write_docx = bool(source_path and source_path.suffix.lower() == ".docx")
+    review_paths: list[Path] = []
 
     for revision_pass in result.passes:
         round_id = f"round_{revision_pass.cycle_index:02d}"
@@ -204,6 +239,7 @@ def write_round_outputs(result: RevisionResult, output_dir: Path, source_path: P
         review_md = reviews_dir / f"{round_id}_review.md"
         draft_md.write_text(revision_pass.draft, encoding="utf-8")
         review_md.write_text(revision_pass.review, encoding="utf-8")
+        review_paths.append(review_md)
         if write_docx:
             write_final_docx(
                 revision_pass.draft,
@@ -211,6 +247,7 @@ def write_round_outputs(result: RevisionResult, output_dir: Path, source_path: P
                 reference_path=source_path,
             )
             write_final_docx(revision_pass.review, reviews_dir / f"{round_id}_review.docx")
+    return review_paths
 
 
 def default_output_dir(args) -> Path:
@@ -402,14 +439,11 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
     output_root = target.output_root
     use_dry_run = args.dry_run or output_root.name == "dry_run_outputs"
     previous_output_dir = target.previous_output_dir
-    previous_final_md = previous_output_dir / "final.md"
-    previous_final_docx = previous_output_dir / "final.docx"
-    if previous_final_md.exists():
-        previous_text = previous_final_md.read_text(encoding="utf-8").strip()
-    elif previous_final_docx.exists():
-        previous_text = read_source_text(previous_final_docx).strip()
+    previous_final_path = resolve_previous_final_path(previous_output_dir)
+    if previous_final_path.suffix.lower() == ".docx":
+        previous_text = read_source_text(previous_final_path).strip()
     else:
-        raise SystemExit(f"previous final.md/final.docx not found under: {previous_output_dir}")
+        previous_text = previous_final_path.read_text(encoding="utf-8").strip()
     if not previous_text:
         raise SystemExit(f"previous final draft is empty: {previous_output_dir}")
 
@@ -430,7 +464,7 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
         requirements=requirements,
         cycles=args.cycles,
         title=project_dir.name,
-        source_path=str(previous_final_docx if previous_final_docx.exists() else previous_final_md),
+        source_path=str(previous_final_path),
     )
 
     if use_dry_run:
@@ -465,7 +499,7 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
     )
     previous_version = version_label_from_output_dir(previous_output_dir)
     current_version = f"v{current_version_number}"
-    source_reference = previous_final_docx if previous_final_docx.exists() else None
+    source_reference = previous_final_path if previous_final_path.suffix.lower() == ".docx" else None
     extra_log = {
         "is_continue": True,
         "feedback_path": str(feedback_path),
@@ -480,6 +514,9 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
         source_path=source_reference,
         summary_generation=summary_generation,
         extra_log=extra_log,
+        mode="dry-run" if use_dry_run else "real",
+        status="continue",
+        parent_version=previous_version,
     )
     write_session_status(current_version_dir, status="continue", current_version=current_version)
 
@@ -493,6 +530,9 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
             source_path=source_reference,
             summary_generation=summary_generation,
             extra_log=extra_log,
+            mode="dry-run" if use_dry_run else "real",
+            status="continue",
+            parent_version=previous_version,
         )
         write_session_status(latest_dir, status="continue", current_version=current_version)
         written_dirs.append(latest_dir)
@@ -655,6 +695,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir,
             source_path=source_path,
             summary_generation=summary_generation,
+            mode="dry-run" if args.dry_run else "real",
+            status="pending",
         )
         write_session_status(output_dir, current_version="v1")
         written_dirs.append(output_dir)

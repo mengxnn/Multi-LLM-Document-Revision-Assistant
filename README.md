@@ -112,6 +112,74 @@ REVIEWER_ENABLE_SEARCH=true
 .\scripts\check_connections.ps1
 ```
 
+## 8. 版本目录结构
+
+新生成的版本目录会同时支持新版结构和旧版兼容文件。新版结构用于程序稳定读取；旧版顶层文件暂时保留，方便人工直接打开，也兼容已有脚本。
+
+```text
+projects/项目实施方案修订_20260615/
+  inputs/
+    source.docx
+    requirements.md
+    meeting_notes.md
+    feedback.md
+
+  outputs/
+    193728-pending-v1/
+      final/
+        final.docx
+        final.md
+
+      reviews/
+        review.md
+        round_01_review.md
+        round_02_review.md
+
+      summaries/
+        changes_summary.docx
+        changes_summary.md
+
+      metadata/
+        manifest.json
+        run_log.json
+        session_status.json
+
+      final.docx
+      final.md
+      review.md
+      changes_summary.docx
+      changes_summary.md
+      run_log.json
+      session_status.json
+
+    latest/
+      final/
+      reviews/
+      summaries/
+      metadata/
+      final.docx
+      final.md
+      review.md
+      changes_summary.docx
+      changes_summary.md
+      run_log.json
+      session_status.json
+
+  metadata/
+    project.json
+    latest.json
+```
+
+目录用途：
+
+- `final/`：最终修改稿。
+- `reviews/`：最终审查意见和每一轮审查意见。
+- `summaries/`：修改说明汇总。
+- `metadata/`：程序读取的 manifest、运行日志和状态文件。
+- 版本目录顶层的 `final.docx`、`review.md`、`run_log.json` 等是兼容文件，后续确认所有功能稳定支持新版目录后再考虑移除。
+
+程序读取文件时会优先读取 `metadata/manifest.json` 指向的新结构；如果是旧项目、没有 manifest，则自动回退到旧版顶层文件。
+
 ## 8. Continue 继续修改
 
 如果对某次结果不满意，可以在对应项目目录里填写反馈：

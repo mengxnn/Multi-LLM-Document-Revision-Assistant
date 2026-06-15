@@ -6,6 +6,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from .project_paths import VersionLayout, status_from_dir, version_number_from_dir
+
 
 WINDOWS_FORBIDDEN_CHARS = r'<>:"/\|?*'
 
@@ -94,34 +96,36 @@ def snapshot_project_inputs(
 
 def write_project_metadata(context: ProjectContext) -> None:
     context.project_dir.mkdir(parents=True, exist_ok=True)
-    (context.project_dir / "project.json").write_text(
-        json.dumps(
-            {
-                "project_id": context.project_dir.name,
-                "title": context.title,
-                "created_date": context.created_date,
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
+    payload = json.dumps(
+        {
+            "project_id": context.project_dir.name,
+            "title": context.title,
+            "created_date": context.created_date,
+        },
+        ensure_ascii=False,
+        indent=2,
     )
+    (context.project_dir / "project.json").write_text(payload, encoding="utf-8")
+    metadata_dir = context.project_dir / "metadata"
+    metadata_dir.mkdir(exist_ok=True)
+    (metadata_dir / "project.json").write_text(payload, encoding="utf-8")
 
 
 def write_session_status(output_dir: str | Path, *, status: str = "pending", current_version: str = "latest") -> None:
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
-    (target / "session_status.json").write_text(
-        json.dumps(
-            {
-                "status": status,
-                "current_version": current_version,
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
+    payload = json.dumps(
+        {
+            "status": status,
+            "current_version": current_version,
+        },
+        ensure_ascii=False,
+        indent=2,
     )
+    (target / "session_status.json").write_text(payload, encoding="utf-8")
+    layout = VersionLayout(target)
+    layout.metadata_dir.mkdir(parents=True, exist_ok=True)
+    layout.session_status.write_text(payload, encoding="utf-8")
 
 
 def write_latest_session(output_root: str | Path, session_dir: Path) -> None:
@@ -129,6 +133,22 @@ def write_latest_session(output_root: str | Path, session_dir: Path) -> None:
     root.mkdir(parents=True, exist_ok=True)
     (root / "latest_session.json").write_text(
         json.dumps({"session_dir": str(session_dir)}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    metadata_dir = root.parent / "metadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    (metadata_dir / "latest.json").write_text(
+        json.dumps(
+            {
+                "session_dir": str(session_dir),
+                "version_dir": session_dir.name,
+                "version": version_number_from_dir(session_dir),
+                "status": status_from_dir(session_dir),
+                "output_root": root.name,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
 

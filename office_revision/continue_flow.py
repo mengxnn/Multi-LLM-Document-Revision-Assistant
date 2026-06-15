@@ -5,6 +5,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .project_paths import resolve_artifact
+
 
 FEEDBACK_TEMPLATE = """# 本轮反馈
 
@@ -51,6 +53,16 @@ def _normalize_feedback(text: str) -> str:
 
 def find_latest_output_dir(output_root: str | Path) -> Path:
     root = Path(output_root)
+    latest_metadata = root.parent / "metadata" / "latest.json"
+    if latest_metadata.exists():
+        try:
+            data = json.loads(latest_metadata.read_text(encoding="utf-8"))
+            session_dir = Path(data["session_dir"])
+            if session_dir.exists() and session_dir.parent == root:
+                return session_dir
+        except (KeyError, json.JSONDecodeError, OSError):
+            pass
+
     latest_session = root / "latest_session.json"
     if latest_session.exists():
         try:
@@ -65,6 +77,16 @@ def find_latest_output_dir(output_root: str | Path) -> Path:
     if latest.exists():
         return latest
     raise SystemExit(f"latest output not found under: {root}")
+
+
+def resolve_previous_final_path(previous_output_dir: str | Path) -> Path:
+    root = Path(previous_output_dir)
+    for key in ("final_md", "final_docx"):
+        try:
+            return resolve_artifact(root, key)
+        except FileNotFoundError:
+            continue
+    raise SystemExit(f"previous final.md/final.docx not found under: {root}")
 
 
 def resolve_continue_target(path: str | Path, *, dry_run: bool) -> ContinueTarget:

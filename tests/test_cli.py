@@ -78,6 +78,12 @@ class CliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertTrue((output / "final.md").exists())
             self.assertTrue((output / "final.docx").exists())
+            self.assertTrue((output / "final" / "final.md").exists())
+            self.assertTrue((output / "final" / "final.docx").exists())
+            self.assertTrue((output / "reviews" / "review.md").exists())
+            self.assertTrue((output / "summaries" / "changes_summary.md").exists())
+            self.assertTrue((output / "metadata" / "run_log.json").exists())
+            self.assertTrue((output / "metadata" / "manifest.json").exists())
             final_doc = Document(output / "final.docx")
             self.assertIn("第 1 轮修改稿", [paragraph.text for paragraph in final_doc.paragraphs])
 

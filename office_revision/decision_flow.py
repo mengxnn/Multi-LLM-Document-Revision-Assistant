@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .continue_flow import find_latest_output_dir, version_label_from_output_dir
 from .project_manager import write_latest_session, write_session_status
+from .project_paths import update_manifest_identity
 
 
 VALID_DECISIONS = ("accept", "continue", "abandon", "skip")
@@ -64,6 +65,7 @@ def apply_decision_to_session(
                 final_dir = session_dir
         current_version = version_label_from_output_dir(final_dir)
         write_session_status(final_dir, status="pending", current_version=current_version)
+        update_manifest_identity(final_dir, status="pending")
         if update_latest:
             _write_latest_status(root, status="pending", current_version=current_version)
             write_latest_session(root, final_dir)
@@ -91,6 +93,7 @@ def apply_decision_to_session(
 
     current_version = version_label_from_output_dir(final_dir)
     write_session_status(final_dir, status=decision, current_version=current_version)
+    update_manifest_identity(final_dir, status=decision)
     if update_latest:
         _write_latest_status(root, status=decision, current_version=current_version)
         write_latest_session(root, final_dir)
