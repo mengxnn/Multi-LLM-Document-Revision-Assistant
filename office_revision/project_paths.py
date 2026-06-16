@@ -12,8 +12,16 @@ ARTIFACT_FALLBACKS = {
     "final_docx": ("final/final.docx", "final.docx"),
     "final_md": ("final/final.md", "final.md"),
     "review_md": ("reviews/review.md", "review.md"),
-    "changes_summary_docx": ("summaries/changes_summary.docx", "changes_summary.docx"),
-    "changes_summary_md": ("summaries/changes_summary.md", "changes_summary.md"),
+    "changes_summary_docx": (
+        "changes_summary/changes_summary.docx",
+        "summaries/changes_summary.docx",
+        "changes_summary.docx",
+    ),
+    "changes_summary_md": (
+        "changes_summary/changes_summary.md",
+        "summaries/changes_summary.md",
+        "changes_summary.md",
+    ),
     "run_log": ("metadata/run_log.json", "run_log.json"),
     "session_status": ("metadata/session_status.json", "session_status.json"),
 }
@@ -32,8 +40,12 @@ class VersionLayout:
         return self.root / "reviews"
 
     @property
+    def changes_summary_dir(self) -> Path:
+        return self.root / "changes_summary"
+
+    @property
     def summaries_dir(self) -> Path:
-        return self.root / "summaries"
+        return self.changes_summary_dir
 
     @property
     def metadata_dir(self) -> Path:
@@ -102,7 +114,7 @@ class VersionLayout:
     def ensure_dirs(self) -> None:
         self.final_dir.mkdir(parents=True, exist_ok=True)
         self.reviews_dir.mkdir(parents=True, exist_ok=True)
-        self.summaries_dir.mkdir(parents=True, exist_ok=True)
+        self.changes_summary_dir.mkdir(parents=True, exist_ok=True)
         self.metadata_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -138,11 +150,13 @@ def structured_manifest(
     round_review_paths: list[Path],
     parent_version: str | None = None,
 ) -> dict[str, Any]:
+    round_reviews = [relative_to_version(path, layout.root) for path in round_review_paths]
+    final_review = round_reviews[-1] if round_reviews else relative_to_version(layout.compat_review_md, layout.root)
     files = {
         "final_docx": relative_to_version(layout.final_docx, layout.root),
         "final_md": relative_to_version(layout.final_md, layout.root),
-        "review_md": relative_to_version(layout.review_md, layout.root),
-        "round_reviews": [relative_to_version(path, layout.root) for path in round_review_paths],
+        "review_md": final_review,
+        "round_reviews": round_reviews,
         "changes_summary_docx": relative_to_version(layout.summary_docx, layout.root),
         "changes_summary_md": relative_to_version(layout.summary_md, layout.root),
         "run_log": relative_to_version(layout.run_log, layout.root),

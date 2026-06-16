@@ -1,6 +1,8 @@
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -80,8 +82,9 @@ class CliTests(unittest.TestCase):
             self.assertTrue((output / "final.docx").exists())
             self.assertTrue((output / "final" / "final.md").exists())
             self.assertTrue((output / "final" / "final.docx").exists())
-            self.assertTrue((output / "reviews" / "review.md").exists())
-            self.assertTrue((output / "summaries" / "changes_summary.md").exists())
+            self.assertFalse((output / "reviews" / "review.md").exists())
+            self.assertTrue((output / "reviews" / "round_01_review.md").exists())
+            self.assertTrue((output / "changes_summary" / "changes_summary.md").exists())
             self.assertTrue((output / "metadata" / "run_log.json").exists())
             self.assertTrue((output / "metadata" / "manifest.json").exists())
             final_doc = Document(output / "final.docx")
@@ -286,6 +289,35 @@ class CliTests(unittest.TestCase):
             )
 
         self.assertEqual(title, "项目实施方案修订")
+
+    def test_choose_project_title_prints_progress_for_llm_generation(self):
+        args = main.__globals__["build_parser"]().parse_args([])
+        reviewer_settings = ModelSettings(
+            role="REVIEWER",
+            api_key="key",
+            base_url="",
+            model="reviewer-model",
+        )
+
+        output = StringIO()
+        with patch("office_revision.cli.generate_llm_project_title", return_value="项目实施方案修订"):
+            with patch("office_revision.cli.datetime") as fake_datetime:
+                fake_datetime.now.return_value.timestamp.side_effect = [10.0, 13.5]
+                with redirect_stdout(output):
+                    title = main.__globals__["choose_project_title"](
+                        args,
+                        source_path=Path("inputs/source.docx"),
+                        source_text="项目实施方案正文",
+                        requirements="请修改",
+                        meeting_notes="",
+                        reviewer_settings=reviewer_settings,
+                    )
+
+        printed = output.getvalue()
+        self.assertEqual(title, "项目实施方案修订")
+        self.assertIn("[准备]", printed)
+        self.assertIn("reviewer-model", printed)
+        self.assertIn("项目文件名", printed)
 
     def test_defaults_to_inputs_directory_for_daily_use(self):
         args = main.__globals__["build_parser"]().parse_args([])

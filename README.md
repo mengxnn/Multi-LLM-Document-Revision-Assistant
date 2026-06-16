@@ -99,11 +99,15 @@ WRITER_API_KEY=writer 的 API key
 WRITER_BASE_URL=writer 的接口地址
 WRITER_MODEL=writer 使用的模型名
 WRITER_ENABLE_SEARCH=true
+WRITER_TIMEOUT_SECONDS=60
+WRITER_MAX_RETRIES=1
 
 REVIEWER_API_KEY=reviewer 的 API key
 REVIEWER_BASE_URL=reviewer 的接口地址
 REVIEWER_MODEL=reviewer 使用的模型名
 REVIEWER_ENABLE_SEARCH=true
+REVIEWER_TIMEOUT_SECONDS=60
+REVIEWER_MAX_RETRIES=1
 ```
 
 连接测试：
@@ -111,6 +115,8 @@ REVIEWER_ENABLE_SEARCH=true
 ```powershell
 .\scripts\check_connections.ps1
 ```
+
+如果真实运行时经常长时间等待，可以把 `WRITER_TIMEOUT_SECONDS`、`REVIEWER_TIMEOUT_SECONDS` 调小，例如 `30`；把 `WRITER_MAX_RETRIES`、`REVIEWER_MAX_RETRIES` 保持为 `1` 可以减少失败后的重复等待。连接测试和正式运行都会显示每次请求的大致耗时。
 
 ## 8. 版本目录结构
 
@@ -131,11 +137,10 @@ projects/项目实施方案修订_20260615/
         final.md
 
       reviews/
-        review.md
         round_01_review.md
         round_02_review.md
 
-      summaries/
+      changes_summary/
         changes_summary.docx
         changes_summary.md
 
@@ -155,7 +160,7 @@ projects/项目实施方案修订_20260615/
     latest/
       final/
       reviews/
-      summaries/
+      changes_summary/
       metadata/
       final.docx
       final.md
@@ -173,8 +178,8 @@ projects/项目实施方案修订_20260615/
 目录用途：
 
 - `final/`：最终修改稿。
-- `reviews/`：最终审查意见和每一轮审查意见。
-- `summaries/`：修改说明汇总。
+- `reviews/`：每一轮审查意见，例如 `round_01_review.md`、`round_02_review.md`。新版结构不再额外生成 `reviews/review.md`。
+- `changes_summary/`：修改说明汇总。
 - `metadata/`：程序读取的 manifest、运行日志和状态文件。
 - 版本目录顶层的 `final.docx`、`review.md`、`run_log.json` 等是兼容文件，后续确认所有功能稳定支持新版目录后再考虑移除。
 

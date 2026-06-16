@@ -1,8 +1,12 @@
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
+from unittest.mock import patch
 
 from office_revision.autogen_runner import (
     _llm_summary_markdown_from_response,
     _model_client_kwargs,
+    _run_role_task,
     _run_async_revision_loop,
 )
 from office_revision.config import ModelSettings
@@ -33,6 +37,8 @@ class AutogenRunnerTests(unittest.TestCase):
                 "api_key": "writer-key",
                 "base_url": "https://writer.example/v1",
                 "extra_body": {"enable_search": True},
+                "timeout": 60,
+                "max_retries": 1,
                 "model_info": {
                     "vision": False,
                     "function_calling": False,
@@ -50,6 +56,8 @@ class AutogenRunnerTests(unittest.TestCase):
             base_url="",
             model="reviewer-model",
             enable_search=False,
+            timeout_seconds=90,
+            max_retries=4,
             model_family="unknown",
             vision=False,
             function_calling=False,
@@ -64,6 +72,8 @@ class AutogenRunnerTests(unittest.TestCase):
             {
                 "model": "reviewer-model",
                 "api_key": "reviewer-key",
+                "timeout": 90,
+                "max_retries": 4,
                 "model_info": {
                     "vision": False,
                     "function_calling": False,
@@ -100,6 +110,76 @@ class AutogenRunnerTests(unittest.TestCase):
         self.assertEqual(len(result.passes), 1)
         self.assertTrue(result.stopped_early)
         self.assertEqual(result.stop_reason, "reviewer_requested_stop")
+
+    def test_run_role_task_prints_progress_and_elapsed_time(self):
+        async def successful_call():
+            return "done"
+
+        output = StringIO()
+        with patch("office_revision.autogen_runner.time.perf_counter", side_effect=[10.0, 22.3]):
+            import asyncio
+
+            with redirect_stdout(output):
+                result = asyncio.run(_run_role_task("writer", 1, "writer-model", successful_call))
+
+        self.assertEqual(result, "done")
+        self.assertIn("[writer] 第 1 轮开始，请求模型 writer-model...", output.getvalue())
+        self.assertIn("[writer] 第 1 轮完成，用时 12.3 秒。", output.getvalue())
+
+    def test_run_role_task_prints_stage_messages(self):
+        async def successful_call():
+            return "done"
+
+        output = StringIO()
+        with patch("office_revision.autogen_runner.time.perf_counter", side_effect=[10.0, 12.0]):
+            import asyncio
+
+            with redirect_stdout(output):
+                asyncio.run(
+                    _run_role_task(
+                        "writer",
+                        3,
+                        "writer-model",
+                        successful_call,
+                        stages=["正在阅读上一轮审查意见和修改指令", "正在生成新一版完整文档"],
+                    )
+                )
+
+        printed = output.getvalue()
+        self.assertIn("[writer]", printed)
+        self.assertIn("writer-model", printed)
+        self.assertIn("上一轮", printed)
+        self.assertIn("生成新一版", printed)
+
+    def test_run_role_task_prints_failure_elapsed_before_reraising(self):
+        async def failing_call():
+            raise RuntimeError("boom")
+
+        output = StringIO()
+        with patch("office_revision.autogen_runner.time.perf_counter", side_effect=[3.0, 8.5]):
+            import asyncio
+
+            with redirect_stdout(output):
+                with self.assertRaisesRegex(RuntimeError, "boom"):
+                    asyncio.run(_run_role_task("reviewer", 2, "reviewer-model", failing_call))
+
+        self.assertIn("[reviewer] 第 2 轮失败，用时 5.5 秒。", output.getvalue())
+
+    def test_run_role_task_prints_timeout_suggestion_on_timeout_like_failure(self):
+        async def failing_call():
+            raise TimeoutError("request timed out")
+
+        output = StringIO()
+        with patch("office_revision.autogen_runner.time.perf_counter", side_effect=[1.0, 121.5]):
+            import asyncio
+
+            with redirect_stdout(output):
+                with self.assertRaises(TimeoutError):
+                    asyncio.run(_run_role_task("writer", 3, "writer-model", failing_call))
+
+        printed = output.getvalue()
+        self.assertIn("WRITER_TIMEOUT_SECONDS", printed)
+        self.assertIn("--cycles", printed)
 
     def test_llm_summary_markdown_from_response_preserves_rule_facts(self):
         result = RevisionResult(

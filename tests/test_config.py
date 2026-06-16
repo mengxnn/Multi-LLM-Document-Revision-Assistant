@@ -120,6 +120,37 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(settings.json_output)
         self.assertFalse(settings.structured_output)
 
+    def test_loads_role_specific_timeout_and_retry_settings(self):
+        values = {
+            "WRITER_API_KEY": "writer-key",
+            "WRITER_MODEL": "writer-model",
+            "WRITER_TIMEOUT_SECONDS": "120",
+            "WRITER_MAX_RETRIES": "3",
+        }
+
+        settings = load_role_settings(values, "WRITER", default_model="default-writer")
+
+        self.assertEqual(settings.timeout_seconds, 120)
+        self.assertEqual(settings.max_retries, 3)
+
+    def test_timeout_and_retry_settings_fall_back_to_shared_openai_values(self):
+        values = {
+            "OPENAI_API_KEY": "shared-key",
+            "OPENAI_TIMEOUT_SECONDS": "75",
+            "OPENAI_MAX_RETRIES": "2",
+        }
+
+        settings = load_role_settings(values, "REVIEWER", default_model="reviewer-model")
+
+        self.assertEqual(settings.timeout_seconds, 75)
+        self.assertEqual(settings.max_retries, 2)
+
+    def test_timeout_and_retry_settings_default_when_missing(self):
+        settings = load_role_settings({}, "WRITER", default_model="writer-model")
+
+        self.assertEqual(settings.timeout_seconds, 60)
+        self.assertEqual(settings.max_retries, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

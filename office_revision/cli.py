@@ -194,7 +194,6 @@ def write_outputs(
     run_log_text = json.dumps(result_to_dict(result, summary_generation, extra=extra_log), ensure_ascii=False, indent=2)
     layout.final_md.write_text(result.final_text, encoding="utf-8")
     layout.compat_final_md.write_text(result.final_text, encoding="utf-8")
-    layout.review_md.write_text(result.final_review, encoding="utf-8")
     layout.compat_review_md.write_text(result.final_review, encoding="utf-8")
     layout.run_log.write_text(run_log_text, encoding="utf-8")
     layout.compat_run_log.write_text(run_log_text, encoding="utf-8")
@@ -205,7 +204,7 @@ def write_outputs(
         write_final_docx(result.final_text, layout.final_docx, reference_path=source_path)
         write_final_docx(result.final_text, layout.compat_final_docx, reference_path=source_path)
     round_review_paths = write_round_outputs(result, output_dir, source_path=source_path)
-    write_changes_summary(result, layout.summaries_dir, summary_text=summary_generation.text)
+    write_changes_summary(result, layout.changes_summary_dir, summary_text=summary_generation.text)
     if layout.summary_md.exists():
         layout.compat_summary_md.write_text(layout.summary_md.read_text(encoding="utf-8"), encoding="utf-8")
     if layout.summary_docx.exists():
@@ -412,6 +411,8 @@ def choose_project_title(
     if args.project_title:
         return args.project_title
     if not args.dry_run and reviewer_settings is not None:
+        start = datetime.now().timestamp()
+        print(f"[准备] 正在生成项目文件名，请求 reviewer 模型 {reviewer_settings.model}...", flush=True)
         try:
             title = generate_llm_project_title(
                 source_text=source_text,
@@ -421,8 +422,12 @@ def choose_project_title(
                 language=args.project_title_language,
             )
             if title.strip():
+                elapsed = datetime.now().timestamp() - start
+                print(f"[准备] 项目文件名生成完成，用时 {elapsed:.1f} 秒：{title.strip()}", flush=True)
                 return title.strip()
-        except Exception:
+        except Exception as exc:
+            elapsed = datetime.now().timestamp() - start
+            print(f"[准备] 项目文件名生成失败，用时 {elapsed:.1f} 秒，改用本地规则命名：{exc}", flush=True)
             pass
     return fallback_project_title(source_path, source_text, requirements)
 
@@ -596,7 +601,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         results = check_all_connections([writer_settings, reviewer_settings])
         for result in results:
             status = "OK" if result.ok else "FAIL"
-            print(f"[{status}] {result.role} model={result.model}: {result.message}")
+            print(f"[{status}] {result.role} model={result.model} elapsed={result.elapsed_seconds:.1f}s: {result.message}")
         return 0 if all(result.ok for result in results) else 1
 
     if args.review_project:

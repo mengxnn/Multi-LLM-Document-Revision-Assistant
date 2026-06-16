@@ -17,6 +17,8 @@ class ModelSettings:
     function_calling: bool = False
     json_output: bool = False
     structured_output: bool = False
+    timeout_seconds: int = 60
+    max_retries: int = 1
 
 
 def load_env_file(path: str | Path) -> dict[str, str]:
@@ -76,6 +78,8 @@ def load_role_settings(
             fallback_key="OPENAI_STRUCTURED_OUTPUT",
             default=False,
         ),
+        timeout_seconds=_env_int(values, f"{role}_TIMEOUT_SECONDS", fallback_key="OPENAI_TIMEOUT_SECONDS", default=60),
+        max_retries=_env_int(values, f"{role}_MAX_RETRIES", fallback_key="OPENAI_MAX_RETRIES", default=1),
     )
 
 
@@ -92,6 +96,24 @@ def _env_bool(
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _env_int(
+    values: dict[str, str],
+    key: str,
+    *,
+    fallback_key: str,
+    default: int,
+) -> int:
+    raw = values.get(key)
+    if raw is None:
+        raw = values.get(fallback_key)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
 def read_optional_text(path: str | Path, default: str) -> str:

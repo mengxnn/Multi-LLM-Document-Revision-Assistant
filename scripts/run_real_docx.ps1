@@ -6,5 +6,5 @@ param(
 $ErrorActionPreference = "Stop"
 
 .\.venv\Scripts\python.exe .\run_revision.py `
-  --cycles 3 `
+  --cycles 5 `
   --summary-mode $SummaryMode

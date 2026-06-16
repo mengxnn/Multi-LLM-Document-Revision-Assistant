@@ -17,8 +17,7 @@ class ProjectPathsTests(unittest.TestCase):
 
         self.assertEqual(layout.final_md, Path("193728-pending-v1/final/final.md"))
         self.assertEqual(layout.final_docx, Path("193728-pending-v1/final/final.docx"))
-        self.assertEqual(layout.review_md, Path("193728-pending-v1/reviews/review.md"))
-        self.assertEqual(layout.summary_md, Path("193728-pending-v1/summaries/changes_summary.md"))
+        self.assertEqual(layout.summary_md, Path("193728-pending-v1/changes_summary/changes_summary.md"))
         self.assertEqual(layout.run_log, Path("193728-pending-v1/metadata/run_log.json"))
         self.assertEqual(layout.compat_final_md, Path("193728-pending-v1/final.md"))
         self.assertEqual(layout.compat_review_md, Path("193728-pending-v1/review.md"))
@@ -38,8 +37,9 @@ class ProjectPathsTests(unittest.TestCase):
 
         self.assertEqual(manifest["schema_version"], 1)
         self.assertEqual(manifest["files"]["final_md"], "final/final.md")
-        self.assertEqual(manifest["files"]["review_md"], "reviews/review.md")
+        self.assertEqual(manifest["files"]["review_md"], "reviews/round_01_review.md")
         self.assertEqual(manifest["files"]["round_reviews"], ["reviews/round_01_review.md"])
+        self.assertEqual(manifest["files"]["changes_summary_md"], "changes_summary/changes_summary.md")
 
     def test_resolve_artifact_prefers_manifest_then_structured_then_legacy(self):
         with tempfile.TemporaryDirectory() as temp_dir:

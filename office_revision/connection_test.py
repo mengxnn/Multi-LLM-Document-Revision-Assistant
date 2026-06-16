@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 
 from .config import ModelSettings
 
@@ -11,6 +12,7 @@ class ConnectionCheckResult:
     model: str
     ok: bool
     message: str
+    elapsed_seconds: float = 0.0
 
 
 def validate_settings(settings: ModelSettings) -> ConnectionCheckResult | None:
@@ -42,6 +44,8 @@ def check_openai_compatible_connection(settings: ModelSettings) -> ConnectionChe
         kwargs = {"api_key": settings.api_key}
         if settings.base_url:
             kwargs["base_url"] = settings.base_url
+        kwargs["timeout"] = settings.timeout_seconds
+        kwargs["max_retries"] = settings.max_retries
         client = OpenAI(**kwargs)
         create_kwargs = {
             "model": settings.model,
@@ -55,7 +59,9 @@ def check_openai_compatible_connection(settings: ModelSettings) -> ConnectionChe
         }
         if settings.enable_search:
             create_kwargs["extra_body"] = {"enable_search": True}
+        start = time.perf_counter()
         response = client.chat.completions.create(**create_kwargs)
+        elapsed = time.perf_counter() - start
         content = response.choices[0].message.content or ""
         search_note = " search=on" if settings.enable_search else " search=off"
         return ConnectionCheckResult(
@@ -63,13 +69,16 @@ def check_openai_compatible_connection(settings: ModelSettings) -> ConnectionChe
             model=settings.model,
             ok=True,
             message=(content.strip() or "Connection succeeded.") + search_note,
+            elapsed_seconds=elapsed,
         )
     except Exception as exc:
+        elapsed = time.perf_counter() - start if "start" in locals() else 0.0
         return ConnectionCheckResult(
             role=settings.role,
             model=settings.model,
             ok=False,
             message=f"{type(exc).__name__}: {exc}",
+            elapsed_seconds=elapsed,
         )
 
 
