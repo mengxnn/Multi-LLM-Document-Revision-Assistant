@@ -128,6 +128,38 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("timeline", seen_writer_contexts[0].meeting_notes)
         self.assertIn("timeline", seen_reviewer_contexts[0].meeting_notes)
 
+    def test_later_cycles_use_previous_draft_review_and_omit_initial_source_materials(self):
+        seen_writer_contexts = []
+        seen_reviewer_contexts = []
+
+        def writer(context):
+            seen_writer_contexts.append(context)
+            return f"draft-{context.cycle_index}"
+
+        def reviewer(context):
+            seen_reviewer_contexts.append(context)
+            return "是否继续修改：是" if context.cycle_index == 1 else "是否继续修改：否"
+
+        run_revision_loop(
+            RevisionRequest(
+                source_text="initial source should only be read in round 1",
+                requirements="initial requirements stay available",
+                meeting_notes="meeting notes should only be read in round 1",
+                cycles=2,
+            ),
+            writer=writer,
+            reviewer=reviewer,
+        )
+
+        self.assertIn("initial source", seen_writer_contexts[0].source_text)
+        self.assertEqual(seen_writer_contexts[1].source_text, "")
+        self.assertEqual(seen_writer_contexts[1].meeting_notes, "")
+        self.assertEqual(seen_writer_contexts[1].previous_draft, "draft-1")
+        self.assertIn("是否继续修改", seen_writer_contexts[1].previous_review)
+        self.assertEqual(seen_reviewer_contexts[1].source_text, "")
+        self.assertEqual(seen_reviewer_contexts[1].meeting_notes, "")
+        self.assertIn("是否继续修改", seen_reviewer_contexts[1].previous_review)
+
 
 if __name__ == "__main__":
     unittest.main()

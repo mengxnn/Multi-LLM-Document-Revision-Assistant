@@ -35,6 +35,7 @@ class ReviewContext:
     cycle_index: int
     draft: str
     meeting_notes: str = ""
+    previous_review: str | None = None
 
 
 @dataclass(frozen=True)
@@ -82,11 +83,13 @@ def run_revision_loop(
     previous_writer_instructions: str | None = None
 
     for cycle_index in range(1, request.cycles + 1):
+        source_text = request.source_text if cycle_index == 1 else ""
+        meeting_notes = request.meeting_notes if cycle_index == 1 else ""
         draft = writer(
             WriterContext(
-                source_text=request.source_text,
+                source_text=source_text,
                 requirements=request.requirements,
-                meeting_notes=request.meeting_notes,
+                meeting_notes=meeting_notes,
                 cycle_index=cycle_index,
                 previous_draft=previous_draft,
                 previous_review=previous_review,
@@ -95,11 +98,12 @@ def run_revision_loop(
         )
         review = reviewer(
             ReviewContext(
-                source_text=request.source_text,
+                source_text=source_text,
                 requirements=request.requirements,
-                meeting_notes=request.meeting_notes,
+                meeting_notes=meeting_notes,
                 cycle_index=cycle_index,
                 draft=draft,
+                previous_review=previous_review,
             )
         )
         decision = parse_review_decision(review)

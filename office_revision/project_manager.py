@@ -10,6 +10,7 @@ from .project_paths import VersionLayout, status_from_dir, version_number_from_d
 
 
 WINDOWS_FORBIDDEN_CHARS = r'<>:"/\|?*'
+DOCUMENT_TYPE_TITLES = ("调研报告", "项目实施方案", "实施方案", "申请书", "论文", "汇报材料", "工作方案")
 
 
 @dataclass(frozen=True)
@@ -51,12 +52,20 @@ def fallback_project_title(
     source_text: str,
     requirements: str,
 ) -> str:
+    explicit_title = _explicit_requirement_title(requirements)
+    if explicit_title:
+        return sanitize_project_title(explicit_title)
+
     if source_path is not None and source_path.stem:
         return sanitize_project_title(source_path.stem)
 
     heading = _first_markdown_heading(source_text) or _first_markdown_heading(requirements)
     if heading:
         return sanitize_project_title(heading)
+
+    document_type = _document_type_title(requirements)
+    if document_type:
+        return sanitize_project_title(document_type)
 
     compact = re.sub(r"\s+", "", requirements)
     return sanitize_project_title(compact[:18] or "document")
@@ -69,7 +78,7 @@ def create_project_context(
     created_date: str,
 ) -> ProjectContext:
     root = Path(projects_root)
-    project_dir = root / make_project_directory_name(title, created_date)
+    project_dir = _unique_project_dir(root, make_project_directory_name(title, created_date))
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "inputs").mkdir(exist_ok=True)
     (project_dir / "outputs").mkdir(exist_ok=True)
@@ -109,6 +118,29 @@ def write_project_metadata(context: ProjectContext) -> None:
     metadata_dir = context.project_dir / "metadata"
     metadata_dir.mkdir(exist_ok=True)
     (metadata_dir / "project.json").write_text(payload, encoding="utf-8")
+
+
+def write_final_suggested_project_title(context: ProjectContext, title: str) -> None:
+    suggested_title = sanitize_project_title(title)
+    metadata_dir = context.project_dir / "metadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    for path in (context.project_dir / "project.json", metadata_dir / "project.json"):
+        if path.exists():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                data = {}
+        else:
+            data = {
+                "project_id": context.project_dir.name,
+                "title": context.title,
+                "created_date": context.created_date,
+            }
+        data.setdefault("project_id", context.project_dir.name)
+        data.setdefault("title", context.title)
+        data.setdefault("created_date", context.created_date)
+        data["final_suggested_title"] = suggested_title
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def write_session_status(output_dir: str | Path, *, status: str = "pending", current_version: str = "latest") -> None:
@@ -159,3 +191,39 @@ def _first_markdown_heading(text: str) -> str | None:
         if match:
             return match.group(1)
     return None
+
+
+def _explicit_requirement_title(requirements: str) -> str | None:
+    patterns = (
+        r"(?:^|\n|[，,。；;])\s*(?:题目|标题)\s*[:：]\s*(.+)",
+        r"(?:^|\n|[，,。；;])\s*(?:题目|标题)\s*(?:为|是)\s*[:：]?\s*(.+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, requirements)
+        if match:
+            return _clean_extracted_title(match.group(1))
+    return None
+
+
+def _clean_extracted_title(text: str) -> str:
+    title = text.strip().strip("「」《》“”\"'")
+    title = re.split(r"[\n。；;，,]", title, maxsplit=1)[0]
+    return title.strip().strip("「」《》“”\"'")
+
+
+def _document_type_title(requirements: str) -> str | None:
+    for document_type in DOCUMENT_TYPE_TITLES:
+        if document_type in requirements:
+            return document_type
+    return None
+
+
+def _unique_project_dir(root: Path, base_name: str) -> Path:
+    candidate = root / base_name
+    if not candidate.exists():
+        return candidate
+    for index in range(2, 1000):
+        candidate = root / f"{base_name}_{index:02d}"
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError(f"too many projects with the same name under {root}")

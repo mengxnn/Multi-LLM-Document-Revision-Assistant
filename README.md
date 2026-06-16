@@ -339,7 +339,9 @@ projects/<项目名_YYYYMMDD>/
   dry_run_outputs/
 ```
 
-`<项目名>` 会优先由大模型根据文档内容和修改要求生成；如果生成失败，会回退到 source 文件名或 requirements 内容摘要。目录名会自动清洗 Windows 不允许的字符。
+`<项目名>` 会先用本地规则生成。建议在 `requirements.md` 开头写一行 `题目：xxx` 或 `标题：xxx`，程序会优先用它作为项目名；否则优先取 source 文件名，再尝试识别 `调研报告`、`项目实施方案`、`申请书`、`论文` 等文档类型，最后才截取 requirements 内容摘要。真实模型运行结束后，reviewer 会根据最终稿生成 `final_suggested_title`，保存到 `project.json` 和 `metadata/project.json`，但不会自动重命名项目目录，避免影响 continue 和状态标记路径。目录名会自动清洗 Windows 不允许的字符。
+
+如果同一天生成了同名项目，程序会自动新建独立目录，例如 `项目名_20260616_02`、`项目名_20260616_03`，不会把新的独立任务混入旧项目的 v2、v3。只有使用 `continue_project.ps1` 继续修改同一项目时，才会在原项目里递增版本。
 
 dry-run 输出到：
 
@@ -358,6 +360,8 @@ projects/<项目名_YYYYMMDD>/outputs/latest
 项目目录里的 `inputs/` 会保存本次使用的输入文件快照，方便回看当时用的是哪份 source、requirements 和 meeting_notes。
 
 如果 `latest` 里的 Word 文件正被打开，刷新 `latest` 可能会被跳过，但时间戳目录仍会保留本次结果。
+
+真实模型运行时，终端会用 `-------` 分隔 writer / reviewer 的每次调用，并显示当前步骤和耗时。第 2 轮以后，writer 和 reviewer 默认只读取上一版 draft、上一轮 review、修改要求等必要上下文，不再反复读取初始 source 和会议纪要，以减少后续轮次耗时。
 
 主要输出：
 

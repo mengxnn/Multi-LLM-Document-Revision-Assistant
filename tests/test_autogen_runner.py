@@ -123,6 +123,7 @@ class AutogenRunnerTests(unittest.TestCase):
                 result = asyncio.run(_run_role_task("writer", 1, "writer-model", successful_call))
 
         self.assertEqual(result, "done")
+        self.assertIn("-------", output.getvalue())
         self.assertIn("[writer] 第 1 轮开始，请求模型 writer-model...", output.getvalue())
         self.assertIn("[writer] 第 1 轮完成，用时 12.3 秒。", output.getvalue())
 

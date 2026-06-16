@@ -235,7 +235,7 @@ class CliTests(unittest.TestCase):
             self.assertIn("使用下面的命令进行状态标记", printed)
             self.assertIn(f'-ProjectDir "{session_dir}"', printed)
 
-    def test_default_dry_run_increments_version_in_existing_project_directory(self):
+    def test_default_dry_run_creates_unique_project_directory_when_same_name_exists(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             inputs = root / "inputs"
@@ -266,10 +266,11 @@ class CliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            project_dir = projects / "Project_Plan_20260612"
-            self.assertTrue((project_dir / "dry_run_outputs" / "094500-pending-v2").exists())
+            project_dir = projects / "Project_Plan_20260612_02"
+            self.assertTrue((project_dir / "dry_run_outputs" / "094500-pending-v1").exists())
+            self.assertTrue((projects / "Project_Plan_20260612" / "dry_run_outputs" / "093000-pending-v1").exists())
 
-    def test_choose_project_title_uses_llm_for_real_runs(self):
+    def test_choose_project_title_uses_local_fallback_before_revision(self):
         args = main.__globals__["build_parser"]().parse_args(["--project-title-language", "zh"])
         reviewer_settings = ModelSettings(
             role="REVIEWER",
@@ -278,7 +279,7 @@ class CliTests(unittest.TestCase):
             model="model",
         )
 
-        with patch("office_revision.cli.generate_llm_project_title", return_value="项目实施方案修订"):
+        with patch("office_revision.cli.generate_llm_project_title") as title_mock:
             title = main.__globals__["choose_project_title"](
                 args,
                 source_path=Path("inputs/source.docx"),
@@ -288,10 +289,10 @@ class CliTests(unittest.TestCase):
                 reviewer_settings=reviewer_settings,
             )
 
-        self.assertEqual(title, "项目实施方案修订")
+        self.assertEqual(title, "source")
+        title_mock.assert_not_called()
 
-    def test_choose_project_title_prints_progress_for_llm_generation(self):
-        args = main.__globals__["build_parser"]().parse_args([])
+    def test_generate_final_suggested_project_title_prints_progress(self):
         reviewer_settings = ModelSettings(
             role="REVIEWER",
             api_key="key",
@@ -304,20 +305,19 @@ class CliTests(unittest.TestCase):
             with patch("office_revision.cli.datetime") as fake_datetime:
                 fake_datetime.now.return_value.timestamp.side_effect = [10.0, 13.5]
                 with redirect_stdout(output):
-                    title = main.__globals__["choose_project_title"](
-                        args,
-                        source_path=Path("inputs/source.docx"),
-                        source_text="项目实施方案正文",
+                    title = main.__globals__["generate_final_suggested_project_title"](
+                        final_text="项目实施方案终稿正文",
                         requirements="请修改",
                         meeting_notes="",
                         reviewer_settings=reviewer_settings,
+                        language="zh",
                     )
 
         printed = output.getvalue()
         self.assertEqual(title, "项目实施方案修订")
-        self.assertIn("[准备]", printed)
+        self.assertIn("[收尾]", printed)
         self.assertIn("reviewer-model", printed)
-        self.assertIn("项目文件名", printed)
+        self.assertIn("最终建议项目名", printed)
 
     def test_defaults_to_inputs_directory_for_daily_use(self):
         args = main.__globals__["build_parser"]().parse_args([])

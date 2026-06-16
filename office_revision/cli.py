@@ -29,6 +29,7 @@ from .project_manager import (
     create_project_context,
     fallback_project_title,
     snapshot_project_inputs,
+    write_final_suggested_project_title,
     write_latest_session,
     write_session_status,
 )
@@ -410,26 +411,37 @@ def choose_project_title(
 ) -> str:
     if args.project_title:
         return args.project_title
-    if not args.dry_run and reviewer_settings is not None:
-        start = datetime.now().timestamp()
-        print(f"[准备] 正在生成项目文件名，请求 reviewer 模型 {reviewer_settings.model}...", flush=True)
-        try:
-            title = generate_llm_project_title(
-                source_text=source_text,
-                requirements=requirements,
-                meeting_notes=meeting_notes,
-                reviewer_settings=reviewer_settings,
-                language=args.project_title_language,
-            )
-            if title.strip():
-                elapsed = datetime.now().timestamp() - start
-                print(f"[准备] 项目文件名生成完成，用时 {elapsed:.1f} 秒：{title.strip()}", flush=True)
-                return title.strip()
-        except Exception as exc:
-            elapsed = datetime.now().timestamp() - start
-            print(f"[准备] 项目文件名生成失败，用时 {elapsed:.1f} 秒，改用本地规则命名：{exc}", flush=True)
-            pass
     return fallback_project_title(source_path, source_text, requirements)
+
+
+def generate_final_suggested_project_title(
+    *,
+    final_text: str,
+    requirements: str,
+    meeting_notes: str,
+    reviewer_settings,
+    language: str,
+) -> str | None:
+    start = datetime.now().timestamp()
+    print(f"[收尾] 正在生成最终建议项目名，请求 reviewer 模型 {reviewer_settings.model}...", flush=True)
+    try:
+        title = generate_llm_project_title(
+            source_text=final_text,
+            requirements=requirements,
+            meeting_notes=meeting_notes,
+            reviewer_settings=reviewer_settings,
+            language=language,
+        )
+        title = title.strip()
+        if not title:
+            return None
+        elapsed = datetime.now().timestamp() - start
+        print(f"[收尾] 最终建议项目名生成完成，用时 {elapsed:.1f} 秒：{title}", flush=True)
+        return title
+    except Exception as exc:
+        elapsed = datetime.now().timestamp() - start
+        print(f"[收尾] 最终建议项目名生成失败，用时 {elapsed:.1f} 秒，保留当前项目目录名：{exc}", flush=True)
+        return None
 
 
 def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
@@ -671,6 +683,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             writer_prompt_path=args.writer_prompt,
             reviewer_prompt_path=args.reviewer_prompt,
         )
+
+    if project_context and not args.dry_run:
+        final_title = generate_final_suggested_project_title(
+            final_text=result.final_text,
+            requirements=requirements,
+            meeting_notes=meeting_notes,
+            reviewer_settings=reviewer_settings,
+            language=args.project_title_language,
+        )
+        if final_title:
+            write_final_suggested_project_title(project_context, final_title)
 
     summary_generation = build_summary_generation(
         result,

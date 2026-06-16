@@ -77,6 +77,7 @@ def _message_content(task_result: Any) -> str:
 
 async def _run_role_task(role: str, cycle_index: int, model: str, call, *, stages: list[str] | None = None) -> str:
     start = time.perf_counter()
+
     for stage in stages or []:
         print(f"[{role}] 第 {cycle_index} 轮：{stage}。", flush=True)
     print(f"[{role}] 第 {cycle_index} 轮开始，请求模型 {model}...", flush=True)
@@ -90,9 +91,11 @@ async def _run_role_task(role: str, cycle_index: int, model: str, call, *, stage
             f"{role.upper()}_TIMEOUT_SECONDS，或减少 --cycles 后重试。",
             flush=True,
         )
+        print("----------------------------------------------------", flush=True)
         raise
     elapsed = time.perf_counter() - start
     print(f"[{role}] 第 {cycle_index} 轮完成，用时 {elapsed:.1f} 秒。", flush=True)
+    print("----------------------------------------------------", flush=True)
     return result
 
 
@@ -102,17 +105,24 @@ def _optional_section(title: str, value: str, missing_text: str) -> str:
 
 
 def _writer_prompt(context: WriterContext) -> str:
+    source_section = (
+        _optional_section("原文/初稿", context.source_text, "未提供原文或初稿，请从零起草。")
+        if context.cycle_index == 1
+        else "【原文/初稿】\n本轮不重复提供初始原文，请以上一版草稿为修改基础。"
+    )
+    meeting_section = (
+        _optional_section("会议纪要", context.meeting_notes, "未提供会议纪要。")
+        if context.cycle_index == 1
+        else "【会议纪要】\n本轮不重复提供会议纪要，请以修改要求和上一轮审查意见为准。"
+    )
     return f"""请执行第 {context.cycle_index} 轮文档写作或修改。
 
 【修改要求】
 {context.requirements}
 
-{_optional_section("原文/初稿", context.source_text, "未提供原文或初稿，请从零起草。")}
+{source_section}
 
-{_optional_section("会议纪要", context.meeting_notes, "未提供会议纪要。")}
-
-【上一轮给 writer 的明确修改指令】
-{context.previous_writer_instructions or "无，当前为首轮。"}
+{meeting_section}
 
 【上一轮完整审查意见】
 {context.previous_review or "无，当前为首轮。"}
@@ -120,18 +130,31 @@ def _writer_prompt(context: WriterContext) -> str:
 【上一版草稿】
 {context.previous_draft or "无，当前为首轮。"}
 
-请输出完整修改稿。优先落实“上一轮给 writer 的明确修改指令”。如果没有原文，请根据修改要求和会议纪要生成一版完整初稿。"""
+请输出完整修改稿。优先落实上一轮审查意见中“给 writer 的修改指令”。如果是首轮且没有原文，请根据修改要求和会议纪要生成一版完整初稿。"""
 
 
 def _reviewer_prompt(context: ReviewContext) -> str:
+    source_section = (
+        _optional_section("原文/初稿", context.source_text, "未提供原文或初稿，本轮应按从零起草场景审查。")
+        if context.cycle_index == 1
+        else "【原文/初稿】\n本轮不重复提供初始原文，请以当前修改稿和修改要求为审查基础。"
+    )
+    meeting_section = (
+        _optional_section("会议纪要", context.meeting_notes, "未提供会议纪要。")
+        if context.cycle_index == 1
+        else "【会议纪要】\n本轮不重复提供会议纪要，请以修改要求和上一轮审查意见为准。"
+    )
     return f"""请执行第 {context.cycle_index} 轮文档审查。
 
 【修改要求】
 {context.requirements}
 
-{_optional_section("原文/初稿", context.source_text, "未提供原文或初稿，本轮应按从零起草场景审查。")}
+{source_section}
 
-{_optional_section("会议纪要", context.meeting_notes, "未提供会议纪要。")}
+{meeting_section}
+
+【上一轮审查意见】
+{context.previous_review or "无，当前为首轮。"}
 
 【当前修改稿】
 {context.draft}
@@ -193,9 +216,11 @@ async def _run_autogen_revision_loop_async(
             result = await writer_agent.run(task=_writer_prompt(context))
             return _message_content(result)
 
-        stages = ["正在阅读初稿、修改要求和会议纪要"]
-        if context.cycle_index > 1:
-            stages.append("正在阅读上一轮审查意见和修改指令")
+        stages = (
+            ["正在阅读初稿、修改要求和会议纪要"]
+            if context.cycle_index == 1
+            else ["正在阅读上一版草稿、上一轮审查意见和修改要求"]
+        )
         stages.append("正在生成新一版完整文档")
         return await _run_role_task("writer", context.cycle_index, writer_settings.model, call, stages=stages)
 
@@ -204,7 +229,7 @@ async def _run_autogen_revision_loop_async(
             result = await reviewer_agent.run(task=_reviewer_prompt(context))
             return _message_content(result)
 
-        stages = ["正在阅读修改稿和修改要求", "正在生成审查意见"]
+        stages = ["正在阅读本轮修改稿、上一轮审查意见和修改要求", "正在生成审查意见"]
         return await _run_role_task("reviewer", context.cycle_index, reviewer_settings.model, call, stages=stages)
 
     try:
@@ -223,11 +248,13 @@ async def _run_async_revision_loop(request, *, writer, reviewer):
     previous_review = None
     previous_writer_instructions = None
     for cycle_index in range(1, request.cycles + 1):
+        source_text = request.source_text if cycle_index == 1 else ""
+        meeting_notes = request.meeting_notes if cycle_index == 1 else ""
         draft = await writer(
             WriterContext(
-                source_text=request.source_text,
+                source_text=source_text,
                 requirements=request.requirements,
-                meeting_notes=request.meeting_notes,
+                meeting_notes=meeting_notes,
                 cycle_index=cycle_index,
                 previous_draft=previous_draft,
                 previous_review=previous_review,
@@ -236,11 +263,12 @@ async def _run_async_revision_loop(request, *, writer, reviewer):
         )
         review = await reviewer(
             ReviewContext(
-                source_text=request.source_text,
+                source_text=source_text,
                 requirements=request.requirements,
-                meeting_notes=request.meeting_notes,
+                meeting_notes=meeting_notes,
                 cycle_index=cycle_index,
                 draft=draft,
+                previous_review=previous_review,
             )
         )
         decision = parse_review_decision(review)
