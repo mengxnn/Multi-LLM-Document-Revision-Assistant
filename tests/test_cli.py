@@ -85,6 +85,10 @@ class CliTests(unittest.TestCase):
             self.assertTrue((output / "final" / "final.docx").exists())
             self.assertFalse((output / "reviews" / "review.md").exists())
             self.assertTrue((output / "reviews" / "round_01_review.md").exists())
+            self.assertTrue((output / "reviews" / "revision_summary.md").exists())
+            self.assertTrue((output / "reviews" / "revision_summary.docx").exists())
+            self.assertTrue((output / "final_review_report" / "final_review_report.md").exists())
+            self.assertTrue((output / "final_review_report" / "final_review_report.docx").exists())
             self.assertTrue((output / "changes_summary" / "changes_summary.md").exists())
             self.assertTrue((output / "metadata" / "run_log.json").exists())
             self.assertTrue((output / "metadata" / "manifest.json").exists())
@@ -235,6 +239,7 @@ class CliTests(unittest.TestCase):
             printed = "\n".join(str(call.args[0]) for call in print_mock.call_args_list)
             self.assertIn("使用下面的命令进行状态标记", printed)
             self.assertIn(f'-ProjectDir "{session_dir}"', printed)
+            self.assertEqual(printed.count("正在生成最终人工复核报告 final_review_report"), 1)
 
     def test_default_dry_run_creates_unique_project_directory_when_same_name_exists(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -355,7 +360,7 @@ class CliTests(unittest.TestCase):
                 exit_code = main(["--projects-root", str(projects), "--cycles", "1"])
 
             self.assertEqual(exit_code, 0)
-            renamed_project = projects / "调研报告_20260616"
+            renamed_project = next(projects.glob("调研报告_*"))
             self.assertTrue((renamed_project / "outputs" / "latest" / "final.md").exists())
             self.assertFalse((projects / "source_20260616").exists())
             metadata = json.loads((renamed_project / "metadata" / "project.json").read_text(encoding="utf-8"))

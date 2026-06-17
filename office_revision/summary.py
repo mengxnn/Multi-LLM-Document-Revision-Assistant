@@ -62,6 +62,46 @@ def write_changes_summary(
     write_final_docx(summary, target_dir / "changes_summary.docx")
 
 
+def write_revision_summary(summary_text: str, output_dir: str | Path) -> None:
+    target_dir = Path(output_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    (target_dir / "revision_summary.md").write_text(summary_text, encoding="utf-8")
+    write_final_docx(summary_text, target_dir / "revision_summary.docx")
+
+
+def build_final_review_report(result: RevisionResult) -> str:
+    sections = [
+        "# 最终人工复核报告",
+        "",
+        "## 一、最终结论",
+        *_final_review_overview_lines(result),
+        "",
+        "## 二、修改要求完成情况",
+        *_requirement_completion_lines(result),
+        "",
+        "## 三、仍需人工确认的问题",
+        *_manual_attention_lines(result),
+        "",
+        "## 四、事实与数据风险",
+        *_risk_lines(result, "事实风险", "数据", "政策", "依据", "引用", "来源"),
+        "",
+        "## 五、格式与表达风险",
+        *_risk_lines(result, "格式", "表达", "语言", "结构", "排版"),
+        "",
+        "## 六、下一步建议",
+        *_next_step_lines(result),
+    ]
+    return "\n".join(sections).rstrip() + "\n"
+
+
+def write_final_review_report(result: RevisionResult, output_dir: str | Path) -> None:
+    target_dir = Path(output_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    report = build_final_review_report(result)
+    (target_dir / "final_review_report.md").write_text(report, encoding="utf-8")
+    write_final_docx(report, target_dir / "final_review_report.docx")
+
+
 def has_required_summary_headings(text: str) -> bool:
     positions: list[int] = []
     for heading in SUMMARY_HEADINGS:
@@ -302,6 +342,54 @@ def _manual_attention_lines(result: RevisionResult) -> list[str]:
     if not items:
         return ["- 未自动发现“需补充 / 需核实 / 待确认 / TODO”等显式标记。"]
     return [f"- {item}" for item in items]
+
+
+def _final_review_overview_lines(result: RevisionResult) -> list[str]:
+    if not result.passes:
+        return ["- 未生成最终稿，无法形成复核结论。"]
+    final_pass = result.passes[-1]
+    return [
+        f"- 实际完成轮数：{len(result.passes)}",
+        f"- 最终 reviewer 评分：{final_pass.review_score if final_pass.review_score is not None else '未识别'}",
+        f"- 是否建议继续修改：{_continue_text(final_pass.review_continue)}",
+        f"- 总体判断：{_final_satisfaction_text(final_pass.review_continue)}",
+    ]
+
+
+def _requirement_completion_lines(result: RevisionResult) -> list[str]:
+    if not result.final_review.strip():
+        return ["- 未生成审查意见，需人工对照修改要求逐项确认。"]
+    return [
+        "- 请以最终稿为准，对照原始修改要求逐项复核。",
+        f"- 最终审查摘要：{_excerpt(result.final_review, limit=420)}",
+    ]
+
+
+def _risk_lines(result: RevisionResult, *keywords: str) -> list[str]:
+    lines = []
+    for line in result.final_review.splitlines():
+        clean = line.strip(" -\t")
+        if clean and any(keyword.lower() in clean.lower() for keyword in keywords):
+            lines.append(f"- {clean}")
+    if lines:
+        return lines[:8]
+    return ["- 未在最终审查意见中自动识别到明显风险项，仍建议人工核对关键事实、数据、格式和引用。"]
+
+
+def _next_step_lines(result: RevisionResult) -> list[str]:
+    if not result.passes:
+        return ["- 重新运行修订流程并生成最终稿。"]
+    final_pass = result.passes[-1]
+    if final_pass.review_continue is True:
+        return [
+            "- reviewer 仍建议继续修改，可在项目的 inputs/feedback.md 中补充人工反馈后运行 continue。",
+            f"- 可优先处理：{_excerpt(final_pass.writer_instructions or final_pass.review, limit=300)}",
+        ]
+    return [
+        "- 先人工核对事实、数据、政策依据和专有名词。",
+        "- 再检查 Word 格式、表格、标题层级和最终交付要求。",
+        "- 如发现新问题，在 inputs/feedback.md 中写明后运行 continue。",
+    ]
 
 
 def _continue_text(value: bool | None) -> str:

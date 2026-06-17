@@ -6,6 +6,7 @@ from docx import Document
 
 from office_revision.summary import (
     SUMMARY_HEADINGS,
+    build_final_review_report,
     build_changes_summary,
     build_llm_polished_changes_summary,
     build_llm_summary_prompt,
@@ -13,6 +14,8 @@ from office_revision.summary import (
     has_required_summary_headings,
     parse_llm_summary_polish,
     write_changes_summary,
+    write_final_review_report,
+    write_revision_summary,
 )
 from office_revision.workflow import RevisionPass, RevisionRequest, RevisionResult
 
@@ -110,6 +113,43 @@ class SummaryTests(unittest.TestCase):
             self.assertTrue((output_dir / "changes_summary.docx").exists())
             document = Document(output_dir / "changes_summary.docx")
             self.assertTrue(any("修改说明汇总" in paragraph.text for paragraph in document.paragraphs))
+
+    def test_write_revision_summary_outputs_md_and_docx(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            write_revision_summary("# 修改说明汇总\n\ncontent", output_dir)
+
+            self.assertTrue((output_dir / "revision_summary.md").exists())
+            self.assertTrue((output_dir / "revision_summary.docx").exists())
+
+    def test_builds_and_writes_final_review_report(self):
+        result = RevisionResult(
+            request=RevisionRequest(source_text="", requirements="Write from scratch.", cycles=1),
+            passes=[
+                RevisionPass(
+                    cycle_index=1,
+                    draft="Final draft with 【需补充：联系人】.",
+                    review="是否继续修改：否\n总体评分：4\n格式风险：表格需检查。\n事实风险：数据来源需核实。",
+                    review_continue=False,
+                    review_score=4,
+                )
+            ],
+        )
+
+        report = build_final_review_report(result)
+
+        self.assertIn("# 最终人工复核报告", report)
+        self.assertIn("一、最终结论", report)
+        self.assertIn("事实风险", report)
+        self.assertIn("格式风险", report)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+
+            write_final_review_report(result, output_dir)
+
+            self.assertTrue((output_dir / "final_review_report.md").exists())
+            self.assertTrue((output_dir / "final_review_report.docx").exists())
 
     def test_validates_required_summary_headings_in_order(self):
         valid_summary = "\n\n".join(SUMMARY_HEADINGS)

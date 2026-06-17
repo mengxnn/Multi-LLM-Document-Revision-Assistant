@@ -7,7 +7,7 @@
 -> writer 生成修改稿
 -> reviewer 审查并给下一轮建议
 -> 多轮循环
--> 输出 final.docx / final.md / review.md / run_log.json
+-> 输出 final.docx / final.md / revision_summary.docx / final_review_report.docx
 ```
 
 ## 1. 输入文件
@@ -139,10 +139,16 @@ projects/项目实施方案修订_20260615/
       reviews/
         round_01_review.md
         round_02_review.md
+        revision_summary.docx
+        revision_summary.md
 
       changes_summary/
         changes_summary.docx
         changes_summary.md
+
+      final_review_report/
+        final_review_report.docx
+        final_review_report.md
 
       metadata/
         manifest.json
@@ -161,6 +167,7 @@ projects/项目实施方案修订_20260615/
       final/
       reviews/
       changes_summary/
+      final_review_report/
       metadata/
       final.docx
       final.md
@@ -178,10 +185,11 @@ projects/项目实施方案修订_20260615/
 目录用途：
 
 - `final/`：最终修改稿。
-- `reviews/`：每一轮审查意见，例如 `round_01_review.md`、`round_02_review.md`。新版结构不再额外生成 `reviews/review.md`。
-- `changes_summary/`：修改说明汇总。
+- `reviews/`：每一轮审查意见，例如 `round_01_review.md`、`round_02_review.md`；同时保存 `revision_summary.md/docx`，用于汇总本次运行中各轮 writer 修改和 reviewer 审查情况。新版结构不再额外生成 `reviews/review.md`。
+- `final_review_report/`：最终人工复核报告，重点列出完成情况、仍需人工确认的问题、事实与格式风险，通常是交付前最值得先看的文件。
+- `changes_summary/`：旧版兼容的修改说明汇总，目前仍会生成，内容与 `reviews/revision_summary.*` 对应，后续确认新版结构稳定后再考虑移除。
 - `metadata/`：程序读取的 manifest、运行日志和状态文件。
-- 版本目录顶层的 `final.docx`、`review.md`、`run_log.json` 等是兼容文件，后续确认所有功能稳定支持新版目录后再考虑移除。
+- 版本目录顶层的 `final.docx`、`review.md`、`changes_summary.docx`、`run_log.json` 等是兼容文件，后续确认所有功能稳定支持新版目录后再考虑移除。
 
 程序读取文件时会优先读取 `metadata/manifest.json` 指向的新结构；如果是旧项目、没有 manifest，则自动回退到旧版顶层文件。
 
@@ -324,8 +332,8 @@ skip     暂不处理，保持 pending
 
 `--summary-mode` 可选：
 
-- `rule`：默认值，用程序规则生成 `changes_summary`，稳定、不额外调用大模型。
-- `llm`：使用 reviewer 的 API、base URL、模型压缩较长的摘要字段，再由程序按固定格式生成 `changes_summary`。
+- `rule`：默认值，用程序规则生成 `reviews/revision_summary`，稳定、不额外调用大模型。
+- `llm`：使用 reviewer 的 API、base URL、模型压缩较长的摘要字段，再由程序按固定格式生成 `reviews/revision_summary`。
 
 ## 4. 输出目录
 
@@ -366,17 +374,19 @@ projects/<项目名_YYYYMMDD>/outputs/latest
 主要输出：
 
 ```text
-final.docx
-final.md
-review.md
-changes_summary.docx
-changes_summary.md
-run_log.json
+final/final.docx
+final/final.md
+reviews/round_01_review.md
+reviews/revision_summary.docx
+reviews/revision_summary.md
+final_review_report/final_review_report.docx
+final_review_report/final_review_report.md
+metadata/run_log.json
 ```
 
-`changes_summary` 是本次运行的修改说明汇总，包含运行概况、输入材料、每轮修改与审查摘要、最终结论，以及自动识别出的“需补充 / 需核实 / 待确认 / TODO”等人工处理事项。
+`reviews/revision_summary` 是本次运行的多轮修改说明汇总，包含运行概况、输入材料、每轮修改与审查摘要、最终结论，以及自动识别出的“需补充 / 需核实 / 待确认 / TODO”等人工处理事项。旧版兼容目录 `changes_summary/` 目前仍会同步生成一份对应内容。
 
-`changes_summary` 有两种生成方式：
+`reviews/revision_summary` 有两种生成方式：
 
 - 默认规则生成：程序根据每轮 writer 草稿、reviewer 审查、最终稿自动整理。
 - LLM 压缩生成：运行时加 `--summary-mode llm`，由 reviewer 模型压缩较长字段，程序负责保留固定格式和运行事实。
@@ -409,6 +419,8 @@ summary_mode_requested
 summary_mode_used
 summary_fallback_reason
 ```
+
+`final_review_report` 是最终人工复核报告，更偏向交付前检查：它会汇总最终结论、修改要求完成情况、仍需人工确认的问题、事实与数据风险、格式与表达风险，以及下一步建议。正式运行生成该报告时，终端会显示 `[收尾] 正在生成最终人工复核报告 final_review_report...`。
 
 每轮结果：
 

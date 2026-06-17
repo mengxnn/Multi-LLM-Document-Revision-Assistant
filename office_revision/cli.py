@@ -49,7 +49,9 @@ from .summary import (
     SummaryGeneration,
     build_changes_summary,
     has_required_summary_headings,
+    write_final_review_report,
     write_changes_summary,
+    write_revision_summary,
 )
 from .workflow import RevisionRequest, RevisionResult, run_revision_loop
 
@@ -187,6 +189,7 @@ def write_outputs(
     mode: str = "unknown",
     status: str | None = None,
     parent_version: str | None = None,
+    announce_final_review_report: bool = True,
 ) -> None:
     summary_generation = summary_generation or SummaryGeneration(text=build_changes_summary(result))
     layout = VersionLayout(output_dir)
@@ -206,6 +209,10 @@ def write_outputs(
         write_final_docx(result.final_text, layout.compat_final_docx, reference_path=source_path)
     round_review_paths = write_round_outputs(result, output_dir, source_path=source_path)
     write_changes_summary(result, layout.changes_summary_dir, summary_text=summary_generation.text)
+    write_revision_summary(summary_generation.text, layout.reviews_dir)
+    if announce_final_review_report:
+        print("[收尾] 正在生成最终人工复核报告 final_review_report...", flush=True)
+    write_final_review_report(result, layout.final_review_report_dir)
     if layout.summary_md.exists():
         layout.compat_summary_md.write_text(layout.summary_md.read_text(encoding="utf-8"), encoding="utf-8")
     if layout.summary_docx.exists():
@@ -570,6 +577,7 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
             mode="dry-run" if use_dry_run else "real",
             status="continue",
             parent_version=previous_version,
+            announce_final_review_report=False,
         )
         write_session_status(latest_dir, status="continue", current_version=current_version)
         written_dirs.append(latest_dir)
@@ -745,6 +753,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             summary_generation=summary_generation,
             mode="dry-run" if args.dry_run else "real",
             status="pending",
+            announce_final_review_report=output_dir.name != "latest",
         )
         write_session_status(output_dir, current_version="v1")
         written_dirs.append(output_dir)

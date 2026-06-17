@@ -22,6 +22,10 @@ ARTIFACT_FALLBACKS = {
         "summaries/changes_summary.md",
         "changes_summary.md",
     ),
+    "revision_summary_docx": ("reviews/revision_summary.docx",),
+    "revision_summary_md": ("reviews/revision_summary.md",),
+    "final_review_report_docx": ("final_review_report/final_review_report.docx",),
+    "final_review_report_md": ("final_review_report/final_review_report.md",),
     "run_log": ("metadata/run_log.json", "run_log.json"),
     "session_status": ("metadata/session_status.json", "session_status.json"),
 }
@@ -42,6 +46,10 @@ class VersionLayout:
     @property
     def changes_summary_dir(self) -> Path:
         return self.root / "changes_summary"
+
+    @property
+    def final_review_report_dir(self) -> Path:
+        return self.root / "final_review_report"
 
     @property
     def summaries_dir(self) -> Path:
@@ -70,6 +78,22 @@ class VersionLayout:
     @property
     def summary_md(self) -> Path:
         return self.summaries_dir / "changes_summary.md"
+
+    @property
+    def revision_summary_docx(self) -> Path:
+        return self.reviews_dir / "revision_summary.docx"
+
+    @property
+    def revision_summary_md(self) -> Path:
+        return self.reviews_dir / "revision_summary.md"
+
+    @property
+    def final_review_report_docx(self) -> Path:
+        return self.final_review_report_dir / "final_review_report.docx"
+
+    @property
+    def final_review_report_md(self) -> Path:
+        return self.final_review_report_dir / "final_review_report.md"
 
     @property
     def run_log(self) -> Path:
@@ -115,6 +139,7 @@ class VersionLayout:
         self.final_dir.mkdir(parents=True, exist_ok=True)
         self.reviews_dir.mkdir(parents=True, exist_ok=True)
         self.changes_summary_dir.mkdir(parents=True, exist_ok=True)
+        self.final_review_report_dir.mkdir(parents=True, exist_ok=True)
         self.metadata_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -159,6 +184,10 @@ def structured_manifest(
         "round_reviews": round_reviews,
         "changes_summary_docx": relative_to_version(layout.summary_docx, layout.root),
         "changes_summary_md": relative_to_version(layout.summary_md, layout.root),
+        "revision_summary_docx": relative_to_version(layout.revision_summary_docx, layout.root),
+        "revision_summary_md": relative_to_version(layout.revision_summary_md, layout.root),
+        "final_review_report_docx": relative_to_version(layout.final_review_report_docx, layout.root),
+        "final_review_report_md": relative_to_version(layout.final_review_report_md, layout.root),
         "run_log": relative_to_version(layout.run_log, layout.root),
         "session_status": relative_to_version(layout.session_status, layout.root),
     }
