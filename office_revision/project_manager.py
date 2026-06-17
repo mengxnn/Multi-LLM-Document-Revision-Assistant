@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import time
 from dataclasses import dataclass
+from typing import Callable
 from pathlib import Path
 
 from .project_paths import VersionLayout, status_from_dir, version_number_from_dir
@@ -30,6 +32,13 @@ class ProjectContext:
     @property
     def dry_run_outputs_dir(self) -> Path:
         return self.project_dir / "dry_run_outputs"
+
+
+@dataclass(frozen=True)
+class RenameProjectResult:
+    status: str
+    reason: str = ""
+    target_dir: Path | None = None
 
 
 def sanitize_project_title(title: str, *, max_length: int = 30) -> str:
@@ -121,7 +130,74 @@ def write_project_metadata(context: ProjectContext) -> None:
 
 
 def write_final_suggested_project_title(context: ProjectContext, title: str) -> None:
+    _write_project_title_metadata(
+        context,
+        final_suggested_title=sanitize_project_title(title),
+    )
+
+
+def finalize_project_title(
+    context: ProjectContext,
+    title: str,
+    *,
+    max_attempts: int = 3,
+    retry_delay_seconds: int = 7,
+    sleep: Callable[[int], None] = time.sleep,
+    rename: Callable[[Path], None] | None = None,
+) -> tuple[ProjectContext, RenameProjectResult]:
     suggested_title = sanitize_project_title(title)
+    target_dir = _unique_project_dir(
+        context.project_dir.parent,
+        make_project_directory_name(suggested_title, context.created_date),
+        current_dir=context.project_dir,
+    )
+    if target_dir == context.project_dir:
+        _write_project_title_metadata(
+            context,
+            final_suggested_title=suggested_title,
+            rename_status="unchanged",
+        )
+        return context, RenameProjectResult(status="unchanged", target_dir=context.project_dir)
+
+    rename_call = rename or context.project_dir.rename
+    last_error = ""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            rename_call(target_dir)
+            new_context = ProjectContext(
+                project_dir=target_dir,
+                title=suggested_title,
+                created_date=context.created_date,
+            )
+            _write_project_title_metadata(
+                new_context,
+                final_suggested_title=suggested_title,
+                rename_status="renamed",
+                original_title=context.title,
+            )
+            return new_context, RenameProjectResult(status="renamed", target_dir=target_dir)
+        except OSError as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+            if attempt < max_attempts:
+                sleep(retry_delay_seconds)
+
+    _write_project_title_metadata(
+        context,
+        final_suggested_title=suggested_title,
+        rename_status="failed",
+        rename_reason=last_error,
+    )
+    return context, RenameProjectResult(status="failed", reason=last_error, target_dir=target_dir)
+
+
+def _write_project_title_metadata(
+    context: ProjectContext,
+    *,
+    final_suggested_title: str | None = None,
+    rename_status: str | None = None,
+    rename_reason: str | None = None,
+    original_title: str | None = None,
+) -> None:
     metadata_dir = context.project_dir / "metadata"
     metadata_dir.mkdir(parents=True, exist_ok=True)
     for path in (context.project_dir / "project.json", metadata_dir / "project.json"):
@@ -139,7 +215,16 @@ def write_final_suggested_project_title(context: ProjectContext, title: str) -> 
         data.setdefault("project_id", context.project_dir.name)
         data.setdefault("title", context.title)
         data.setdefault("created_date", context.created_date)
-        data["final_suggested_title"] = suggested_title
+        data["project_id"] = context.project_dir.name
+        data["title"] = context.title
+        if original_title:
+            data["original_title"] = original_title
+        if final_suggested_title:
+            data["final_suggested_title"] = final_suggested_title
+        if rename_status:
+            data["rename_status"] = rename_status
+        if rename_reason:
+            data["rename_reason"] = rename_reason
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -218,12 +303,16 @@ def _document_type_title(requirements: str) -> str | None:
     return None
 
 
-def _unique_project_dir(root: Path, base_name: str) -> Path:
+def _unique_project_dir(root: Path, base_name: str, *, current_dir: Path | None = None) -> Path:
     candidate = root / base_name
+    if current_dir is not None and candidate == current_dir:
+        return candidate
     if not candidate.exists():
         return candidate
     for index in range(2, 1000):
         candidate = root / f"{base_name}_{index:02d}"
+        if current_dir is not None and candidate == current_dir:
+            return candidate
         if not candidate.exists():
             return candidate
     raise RuntimeError(f"too many projects with the same name under {root}")

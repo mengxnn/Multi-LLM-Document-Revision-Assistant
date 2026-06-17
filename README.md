@@ -339,9 +339,9 @@ projects/<项目名_YYYYMMDD>/
   dry_run_outputs/
 ```
 
-`<项目名>` 会先用本地规则生成。建议在 `requirements.md` 开头写一行 `题目：xxx` 或 `标题：xxx`，程序会优先用它作为项目名；否则优先取 source 文件名，再尝试识别 `调研报告`、`项目实施方案`、`申请书`、`论文` 等文档类型，最后才截取 requirements 内容摘要。真实模型运行结束后，reviewer 会根据最终稿生成 `final_suggested_title`，保存到 `project.json` 和 `metadata/project.json`，但不会自动重命名项目目录，避免影响 continue 和状态标记路径。目录名会自动清洗 Windows 不允许的字符。
+`<项目名>` 会先用本地规则生成。建议在 `requirements.md` 开头写一行 `题目：xxx` 或 `标题：xxx`，程序会优先用它作为项目名；否则优先取 source 文件名，再尝试识别 `调研报告`、`项目实施方案`、`申请书`、`论文` 等文档类型，最后才截取 requirements 内容摘要。真实模型运行结束后，reviewer 会根据最终稿生成 `final_suggested_title`，保存到 `project.json` 和 `metadata/project.json`，并在普通新任务中自动尝试重命名项目目录。`continue_project.ps1` 不会重命名项目目录。目录名会自动清洗 Windows 不允许的字符。
 
-如果同一天生成了同名项目，程序会自动新建独立目录，例如 `项目名_20260616_02`、`项目名_20260616_03`，不会把新的独立任务混入旧项目的 v2、v3。只有使用 `continue_project.ps1` 继续修改同一项目时，才会在原项目里递增版本。
+如果同一天生成了同名项目，程序会自动新建独立目录，例如 `项目名_20260616_02`、`项目名_20260616_03`，不会把新的独立任务混入旧项目的 v2、v3。只有使用 `continue_project.ps1` 继续修改同一项目时，才会在原项目里递增版本。自动重命名前，终端会提示暂时不要用 Word/WPS/记事本打开本项目文件；如果目录被占用，程序会每 7 秒重试一次，最多重试 3 次。仍失败时不会中断输出，会在 `project.json` 中记录 `rename_status` 和 `rename_reason`。
 
 dry-run 输出到：
 

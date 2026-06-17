@@ -28,8 +28,8 @@ from .dry_run import dry_run_reviewer, dry_run_writer
 from .project_manager import (
     create_project_context,
     fallback_project_title,
+    finalize_project_title,
     snapshot_project_inputs,
-    write_final_suggested_project_title,
     write_latest_session,
     write_session_status,
 )
@@ -444,6 +444,26 @@ def generate_final_suggested_project_title(
         return None
 
 
+def finalize_project_directory(context, final_title: str):
+    print(
+        "***[收尾] 正在根据最终建议项目名整理项目目录。请暂时不要用 Word/WPS/记事本打开本项目文件。***",
+        flush=True,
+    )
+    new_context, rename_result = finalize_project_title(context, final_title)
+    if rename_result.status == "renamed":
+        print(f"[收尾] 项目目录已重命名：{new_context.project_dir}", flush=True)
+    elif rename_result.status == "unchanged":
+        print(f"[收尾] 项目目录名已匹配最终建议项目名：{new_context.project_dir}", flush=True)
+    else:
+        print(
+            "[收尾] 项目目录暂时无法重命名，可能有文件被打开。"
+            "请关闭 Word/WPS/记事本后手动重命名，或稍后重试。"
+            f"原因：{rename_result.reason}",
+            flush=True,
+        )
+    return new_context
+
+
 def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
     target = resolve_continue_target(args.continue_project, dry_run=args.dry_run)
     project_dir = target.project_dir
@@ -693,7 +713,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             language=args.project_title_language,
         )
         if final_title:
-            write_final_suggested_project_title(project_context, final_title)
+            project_context = finalize_project_directory(project_context, final_title)
 
     summary_generation = build_summary_generation(
         result,

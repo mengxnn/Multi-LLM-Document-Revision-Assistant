@@ -11,6 +11,7 @@ from docx import Document
 from office_revision.cli import main
 from office_revision.config import ModelSettings
 from office_revision.connection_test import ConnectionCheckResult
+from office_revision.workflow import RevisionPass, RevisionRequest, RevisionResult
 
 
 class CliTests(unittest.TestCase):
@@ -318,6 +319,49 @@ class CliTests(unittest.TestCase):
         self.assertIn("[收尾]", printed)
         self.assertIn("reviewer-model", printed)
         self.assertIn("最终建议项目名", printed)
+
+    def test_real_run_renames_project_directory_from_final_suggested_title(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "inputs"
+            projects = root / "projects"
+            inputs.mkdir()
+            (inputs / "source.md").write_text("source text", encoding="utf-8")
+            (inputs / "requirements.md").write_text("Improve it.", encoding="utf-8")
+
+            fake_result = RevisionResult(
+                request=RevisionRequest(
+                    source_text="source text",
+                    requirements="Improve it.",
+                    cycles=1,
+                    source_path=str(inputs / "source.md"),
+                ),
+                passes=[
+                    RevisionPass(
+                        cycle_index=1,
+                        draft="final draft",
+                        review="是否继续修改：否",
+                    )
+                ],
+            )
+
+            with patch("office_revision.cli.DEFAULT_INPUT_DIR", inputs), patch(
+                "office_revision.autogen_runner.run_autogen_revision_loop",
+                return_value=fake_result,
+            ), patch(
+                "office_revision.cli.generate_final_suggested_project_title",
+                return_value="调研报告",
+            ), patch("builtins.print") as print_mock:
+                exit_code = main(["--projects-root", str(projects), "--cycles", "1"])
+
+            self.assertEqual(exit_code, 0)
+            renamed_project = projects / "调研报告_20260616"
+            self.assertTrue((renamed_project / "outputs" / "latest" / "final.md").exists())
+            self.assertFalse((projects / "source_20260616").exists())
+            metadata = json.loads((renamed_project / "metadata" / "project.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["rename_status"], "renamed")
+            printed = "\n".join(str(call.args[0]) for call in print_mock.call_args_list)
+            self.assertIn(str(renamed_project), printed)
 
     def test_defaults_to_inputs_directory_for_daily_use(self):
         args = main.__globals__["build_parser"]().parse_args([])

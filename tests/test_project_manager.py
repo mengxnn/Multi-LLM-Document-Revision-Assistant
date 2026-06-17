@@ -5,8 +5,10 @@ from pathlib import Path
 
 from office_revision.project_manager import (
     ProjectContext,
+    RenameProjectResult,
     create_project_context,
     fallback_project_title,
+    finalize_project_title,
     make_project_directory_name,
     sanitize_project_title,
     snapshot_project_inputs,
@@ -126,6 +128,77 @@ class ProjectManagerTests(unittest.TestCase):
             self.assertEqual(root_metadata["title"], "source")
             self.assertEqual(root_metadata["final_suggested_title"], "项目实施方案终稿")
             self.assertEqual(structured_metadata["final_suggested_title"], "项目实施方案终稿")
+
+    def test_finalize_project_title_renames_project_directory_and_updates_metadata(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            context = create_project_context(
+                projects_root=temp_dir,
+                title="source",
+                created_date="20260616",
+            )
+            snapshot_project_inputs(
+                context,
+                source_path=None,
+                requirements_path=Path(temp_dir) / "missing_requirements.md",
+                meeting_notes_path=None,
+            )
+
+            new_context, result = finalize_project_title(context, "县域养老服务发展现状调研报告")
+
+            self.assertIsInstance(result, RenameProjectResult)
+            self.assertEqual(result.status, "renamed")
+            self.assertEqual(new_context.project_dir.name, "县域养老服务发展现状调研报告_20260616")
+            self.assertFalse(context.project_dir.exists())
+            metadata = json.loads((new_context.project_dir / "metadata" / "project.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["title"], "县域养老服务发展现状调研报告")
+            self.assertEqual(metadata["original_title"], "source")
+            self.assertEqual(metadata["final_suggested_title"], "县域养老服务发展现状调研报告")
+            self.assertEqual(metadata["rename_status"], "renamed")
+
+    def test_finalize_project_title_uses_numbered_directory_when_target_exists(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            existing = Path(temp_dir) / "调研报告_20260616"
+            existing.mkdir()
+            context = create_project_context(
+                projects_root=temp_dir,
+                title="source",
+                created_date="20260616",
+            )
+
+            new_context, result = finalize_project_title(context, "调研报告")
+
+            self.assertEqual(result.status, "renamed")
+            self.assertEqual(new_context.project_dir.name, "调研报告_20260616_02")
+
+    def test_finalize_project_title_retries_and_records_failure_when_rename_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            context = create_project_context(
+                projects_root=temp_dir,
+                title="source",
+                created_date="20260616",
+            )
+            sleep_calls = []
+
+            def failing_rename(target):
+                raise PermissionError("locked")
+
+            new_context, result = finalize_project_title(
+                context,
+                "调研报告",
+                max_attempts=3,
+                retry_delay_seconds=7,
+                sleep=sleep_calls.append,
+                rename=failing_rename,
+            )
+
+            self.assertEqual(new_context.project_dir, context.project_dir)
+            self.assertEqual(result.status, "failed")
+            self.assertEqual(result.reason, "PermissionError: locked")
+            self.assertEqual(sleep_calls, [7, 7])
+            metadata = json.loads((context.project_dir / "metadata" / "project.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["final_suggested_title"], "调研报告")
+            self.assertEqual(metadata["rename_status"], "failed")
+            self.assertIn("locked", metadata["rename_reason"])
 
 
 if __name__ == "__main__":
