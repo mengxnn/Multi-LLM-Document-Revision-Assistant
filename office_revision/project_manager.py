@@ -123,7 +123,6 @@ def write_project_metadata(context: ProjectContext) -> None:
         ensure_ascii=False,
         indent=2,
     )
-    (context.project_dir / "project.json").write_text(payload, encoding="utf-8")
     metadata_dir = context.project_dir / "metadata"
     metadata_dir.mkdir(exist_ok=True)
     (metadata_dir / "project.json").write_text(payload, encoding="utf-8")
@@ -200,32 +199,32 @@ def _write_project_title_metadata(
 ) -> None:
     metadata_dir = context.project_dir / "metadata"
     metadata_dir.mkdir(parents=True, exist_ok=True)
-    for path in (context.project_dir / "project.json", metadata_dir / "project.json"):
-        if path.exists():
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                data = {}
-        else:
-            data = {
-                "project_id": context.project_dir.name,
-                "title": context.title,
-                "created_date": context.created_date,
-            }
-        data.setdefault("project_id", context.project_dir.name)
-        data.setdefault("title", context.title)
-        data.setdefault("created_date", context.created_date)
-        data["project_id"] = context.project_dir.name
-        data["title"] = context.title
-        if original_title:
-            data["original_title"] = original_title
-        if final_suggested_title:
-            data["final_suggested_title"] = final_suggested_title
-        if rename_status:
-            data["rename_status"] = rename_status
-        if rename_reason:
-            data["rename_reason"] = rename_reason
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    path = metadata_dir / "project.json"
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            data = {}
+    else:
+        data = {
+            "project_id": context.project_dir.name,
+            "title": context.title,
+            "created_date": context.created_date,
+        }
+    data.setdefault("project_id", context.project_dir.name)
+    data.setdefault("title", context.title)
+    data.setdefault("created_date", context.created_date)
+    data["project_id"] = context.project_dir.name
+    data["title"] = context.title
+    if original_title:
+        data["original_title"] = original_title
+    if final_suggested_title:
+        data["final_suggested_title"] = final_suggested_title
+    if rename_status:
+        data["rename_status"] = rename_status
+    if rename_reason:
+        data["rename_reason"] = rename_reason
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def write_session_status(output_dir: str | Path, *, status: str = "pending", current_version: str = "latest") -> None:
@@ -239,19 +238,14 @@ def write_session_status(output_dir: str | Path, *, status: str = "pending", cur
         ensure_ascii=False,
         indent=2,
     )
-    (target / "session_status.json").write_text(payload, encoding="utf-8")
     layout = VersionLayout(target)
     layout.metadata_dir.mkdir(parents=True, exist_ok=True)
     layout.session_status.write_text(payload, encoding="utf-8")
 
 
-def write_latest_session(output_root: str | Path, session_dir: Path) -> None:
+def write_latest_metadata(output_root: str | Path, session_dir: Path) -> None:
     root = Path(output_root)
     root.mkdir(parents=True, exist_ok=True)
-    (root / "latest_session.json").write_text(
-        json.dumps({"session_dir": str(session_dir)}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
     metadata_dir = root.parent / "metadata"
     metadata_dir.mkdir(parents=True, exist_ok=True)
     (metadata_dir / "latest.json").write_text(

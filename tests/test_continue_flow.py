@@ -13,19 +13,34 @@ from office_revision.continue_flow import (
 )
 
 
+def write_latest_metadata(project_dir: Path, session: Path, output_root_name: str = "outputs") -> None:
+    metadata = project_dir / "metadata"
+    metadata.mkdir(parents=True, exist_ok=True)
+    (metadata / "latest.json").write_text(
+        json.dumps(
+            {
+                "session_dir": str(session),
+                "version_dir": session.name,
+                "version": 1,
+                "status": "pending",
+                "output_root": output_root_name,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 class ContinueFlowTests(unittest.TestCase):
-    def test_finds_latest_output_dir_from_latest_session_file(self):
+    def test_finds_latest_output_dir_from_project_metadata(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            output_root = root / "outputs"
+            project = root / "Project_20260612"
+            output_root = project / "outputs"
             session = output_root / "153000-pending-v1"
             latest = output_root / "latest"
             session.mkdir(parents=True)
             latest.mkdir()
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(session)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(project, session)
 
             self.assertEqual(find_latest_output_dir(output_root), session)
 
@@ -50,10 +65,7 @@ class ContinueFlowTests(unittest.TestCase):
             output_root = project / "outputs"
             session = output_root / "153000-pending-v1"
             session.mkdir(parents=True)
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(session)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(project, session)
 
             target = resolve_continue_target(project, dry_run=False)
 

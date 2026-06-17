@@ -30,7 +30,7 @@ from .project_manager import (
     fallback_project_title,
     finalize_project_title,
     snapshot_project_inputs,
-    write_latest_session,
+    write_latest_metadata,
     write_session_status,
 )
 from .project_paths import (
@@ -50,7 +50,6 @@ from .summary import (
     build_changes_summary,
     has_required_summary_headings,
     write_final_review_report,
-    write_changes_summary,
     write_revision_summary,
 )
 from .workflow import RevisionRequest, RevisionResult, run_revision_loop
@@ -148,7 +147,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--summary-mode",
         choices=("rule", "llm"),
         default="rule",
-        help="How to generate changes_summary.md/docx. rule is deterministic; llm uses reviewer model with rule fallback.",
+        help="How to generate reviews/revision_summary.md/docx. rule is deterministic; llm uses reviewer model with rule fallback.",
     )
     return parser
 
@@ -197,26 +196,16 @@ def write_outputs(
     layout.ensure_dirs()
     run_log_text = json.dumps(result_to_dict(result, summary_generation, extra=extra_log), ensure_ascii=False, indent=2)
     layout.final_md.write_text(result.final_text, encoding="utf-8")
-    layout.compat_final_md.write_text(result.final_text, encoding="utf-8")
-    layout.compat_review_md.write_text(result.final_review, encoding="utf-8")
     layout.run_log.write_text(run_log_text, encoding="utf-8")
-    layout.compat_run_log.write_text(run_log_text, encoding="utf-8")
     if source_path is None:
         write_final_docx(result.final_text, layout.final_docx)
-        write_final_docx(result.final_text, layout.compat_final_docx)
     elif source_path.suffix.lower() == ".docx":
         write_final_docx(result.final_text, layout.final_docx, reference_path=source_path)
-        write_final_docx(result.final_text, layout.compat_final_docx, reference_path=source_path)
     round_review_paths = write_round_outputs(result, output_dir, source_path=source_path)
-    write_changes_summary(result, layout.changes_summary_dir, summary_text=summary_generation.text)
     write_revision_summary(summary_generation.text, layout.reviews_dir)
     if announce_final_review_report:
         print("[收尾] 正在生成最终人工复核报告 final_review_report...", flush=True)
     write_final_review_report(result, layout.final_review_report_dir)
-    if layout.summary_md.exists():
-        layout.compat_summary_md.write_text(layout.summary_md.read_text(encoding="utf-8"), encoding="utf-8")
-    if layout.summary_docx.exists():
-        layout.compat_summary_docx.write_bytes(layout.summary_docx.read_bytes())
     write_manifest(
         layout,
         structured_manifest(
@@ -295,7 +284,14 @@ def resolve_project_output_root(project_dir: Path, *, dry_run: bool) -> Path:
 
 
 def _has_latest_output(output_root: Path) -> bool:
-    return (output_root / "latest_session.json").exists() or (output_root / "latest").exists()
+    latest_metadata = output_root.parent / "metadata" / "latest.json"
+    if latest_metadata.exists():
+        try:
+            data = json.loads(latest_metadata.read_text(encoding="utf-8"))
+            return data.get("output_root") == output_root.name
+        except (json.JSONDecodeError, OSError):
+            return False
+    return (output_root / "latest").exists()
 
 
 def prepare_output_dir(output_dir: Path) -> bool:
@@ -583,7 +579,7 @@ def run_continue_project(args, *, writer_settings, reviewer_settings) -> int:
         written_dirs.append(latest_dir)
     else:
         skipped_dirs.append(latest_dir)
-    write_latest_session(output_root, current_version_dir)
+    write_latest_metadata(output_root, current_version_dir)
     print("Wrote continued revision outputs to " + ", ".join(str(path) for path in written_dirs))
     print_review_command(current_version_dir)
     if skipped_dirs:
@@ -760,7 +756,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if project_context and written_dirs:
         primary_session_dir = next((path for path in written_dirs if path.name != "latest"), written_dirs[0])
         output_root = project_context.dry_run_outputs_dir if args.dry_run else project_context.outputs_dir
-        write_latest_session(output_root, primary_session_dir)
+        write_latest_metadata(output_root, primary_session_dir)
     print("Wrote revision outputs to " + ", ".join(str(path) for path in written_dirs))
     if project_context and written_dirs:
         print_review_command(primary_session_dir)

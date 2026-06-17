@@ -39,9 +39,9 @@ class CliTests(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            final_text = (output / "final.md").read_text(encoding="utf-8")
-            review_text = (output / "review.md").read_text(encoding="utf-8")
-            run_log = json.loads((output / "run_log.json").read_text(encoding="utf-8"))
+            final_text = (output / "final" / "final.md").read_text(encoding="utf-8")
+            review_text = (output / "reviews" / "round_02_review.md").read_text(encoding="utf-8")
+            run_log = json.loads((output / "metadata" / "run_log.json").read_text(encoding="utf-8"))
 
             self.assertIn("第 2 轮修改稿", final_text)
             self.assertIn("一、总体结论", review_text)
@@ -79,20 +79,23 @@ class CliTests(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            self.assertTrue((output / "final.md").exists())
-            self.assertTrue((output / "final.docx").exists())
             self.assertTrue((output / "final" / "final.md").exists())
             self.assertTrue((output / "final" / "final.docx").exists())
+            self.assertFalse((output / "final.md").exists())
+            self.assertFalse((output / "final.docx").exists())
+            self.assertFalse((output / "review.md").exists())
             self.assertFalse((output / "reviews" / "review.md").exists())
             self.assertTrue((output / "reviews" / "round_01_review.md").exists())
             self.assertTrue((output / "reviews" / "revision_summary.md").exists())
             self.assertTrue((output / "reviews" / "revision_summary.docx").exists())
             self.assertTrue((output / "final_review_report" / "final_review_report.md").exists())
             self.assertTrue((output / "final_review_report" / "final_review_report.docx").exists())
-            self.assertTrue((output / "changes_summary" / "changes_summary.md").exists())
+            self.assertFalse((output / "changes_summary").exists())
+            self.assertFalse((output / "changes_summary.md").exists())
+            self.assertFalse((output / "changes_summary.docx").exists())
             self.assertTrue((output / "metadata" / "run_log.json").exists())
             self.assertTrue((output / "metadata" / "manifest.json").exists())
-            final_doc = Document(output / "final.docx")
+            final_doc = Document(output / "final" / "final.docx")
             self.assertIn("第 1 轮修改稿", [paragraph.text for paragraph in final_doc.paragraphs])
 
     def test_check_connections_does_not_require_source_or_requirements(self):
@@ -205,11 +208,13 @@ class CliTests(unittest.TestCase):
             project_dirs = list(projects.glob("Project_Plan_*"))
             self.assertEqual(len(project_dirs), 1)
             project_dir = project_dirs[0]
-            self.assertTrue((project_dir / "project.json").exists())
+            self.assertFalse((project_dir / "project.json").exists())
+            self.assertTrue((project_dir / "metadata" / "project.json").exists())
             self.assertTrue((project_dir / "inputs" / "source.md").exists())
             self.assertTrue((project_dir / "inputs" / "requirements.md").exists())
-            self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "final.md").exists())
-            self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "session_status.json").exists())
+            self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "final" / "final.md").exists())
+            self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "metadata" / "session_status.json").exists())
+            self.assertFalse((project_dir / "dry_run_outputs" / "latest" / "final.md").exists())
 
     def test_default_dry_run_prints_review_command_for_new_version(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -361,7 +366,7 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             renamed_project = next(projects.glob("调研报告_*"))
-            self.assertTrue((renamed_project / "outputs" / "latest" / "final.md").exists())
+            self.assertTrue((renamed_project / "outputs" / "latest" / "final" / "final.md").exists())
             self.assertFalse((projects / "source_20260616").exists())
             metadata = json.loads((renamed_project / "metadata" / "project.json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["rename_status"], "renamed")
@@ -444,11 +449,13 @@ class CliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertTrue((output / "final.md").exists())
-            self.assertTrue((output / "final.docx").exists())
-            self.assertTrue((output / "changes_summary.md").exists())
-            self.assertTrue((output / "changes_summary.docx").exists())
-            run_log = json.loads((output / "run_log.json").read_text(encoding="utf-8"))
+            self.assertTrue((output / "final" / "final.md").exists())
+            self.assertTrue((output / "final" / "final.docx").exists())
+            self.assertTrue((output / "reviews" / "revision_summary.md").exists())
+            self.assertTrue((output / "reviews" / "revision_summary.docx").exists())
+            self.assertFalse((output / "final.md").exists())
+            self.assertFalse((output / "changes_summary.md").exists())
+            run_log = json.loads((output / "metadata" / "run_log.json").read_text(encoding="utf-8"))
             self.assertFalse(run_log["has_source"])
             self.assertIsNone(run_log["source_path"])
 
@@ -480,7 +487,7 @@ class CliTests(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            run_log = json.loads((output / "run_log.json").read_text(encoding="utf-8"))
+            run_log = json.loads((output / "metadata" / "run_log.json").read_text(encoding="utf-8"))
             self.assertEqual(run_log["source_path"], str(source))
             self.assertEqual(run_log["meeting_notes_path"], str(meeting_notes))
             self.assertFalse(run_log["has_source"])
@@ -499,7 +506,7 @@ class CliTests(unittest.TestCase):
                 exit_code = main(["--output-dir", str(output), "--cycles", "1", "--dry-run"])
 
             self.assertEqual(exit_code, 0)
-            run_log = json.loads((output / "run_log.json").read_text(encoding="utf-8"))
+            run_log = json.loads((output / "metadata" / "run_log.json").read_text(encoding="utf-8"))
             self.assertTrue(run_log["has_source"])
             self.assertEqual(run_log["source_path"], str(inputs / "source.md"))
 
@@ -548,8 +555,9 @@ class CliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertTrue((output / "changes_summary.md").exists())
-            run_log = json.loads((output / "run_log.json").read_text(encoding="utf-8"))
+            self.assertTrue((output / "reviews" / "revision_summary.md").exists())
+            self.assertFalse((output / "changes_summary.md").exists())
+            run_log = json.loads((output / "metadata" / "run_log.json").read_text(encoding="utf-8"))
             self.assertEqual(run_log["summary_mode_requested"], "llm")
             self.assertEqual(run_log["summary_mode_used"], "rule")
             self.assertIn("summary model unavailable", run_log["summary_fallback_reason"])

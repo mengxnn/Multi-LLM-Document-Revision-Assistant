@@ -7,7 +7,7 @@
 -> writer 生成修改稿
 -> reviewer 审查并给下一轮建议
 -> 多轮循环
--> 输出 final.docx / final.md / revision_summary.docx / final_review_report.docx
+-> 输出 final/final.docx / final/final.md / reviews/revision_summary.docx / final_review_report/final_review_report.docx
 ```
 
 ## 1. 输入文件
@@ -120,7 +120,7 @@ REVIEWER_MAX_RETRIES=1
 
 ## 8. 版本目录结构
 
-新生成的版本目录会同时支持新版结构和旧版兼容文件。新版结构用于程序稳定读取；旧版顶层文件暂时保留，方便人工直接打开，也兼容已有脚本。
+新生成的版本目录只使用新版结构。`latest/` 会保留为最新版本副本，方便直接打开，也可以在用户误改 `latest/` 时保留时间戳版本目录里的原始结果。
 
 ```text
 projects/项目实施方案修订_20260615/
@@ -142,10 +142,6 @@ projects/项目实施方案修订_20260615/
         revision_summary.docx
         revision_summary.md
 
-      changes_summary/
-        changes_summary.docx
-        changes_summary.md
-
       final_review_report/
         final_review_report.docx
         final_review_report.md
@@ -155,27 +151,11 @@ projects/项目实施方案修订_20260615/
         run_log.json
         session_status.json
 
-      final.docx
-      final.md
-      review.md
-      changes_summary.docx
-      changes_summary.md
-      run_log.json
-      session_status.json
-
     latest/
       final/
       reviews/
-      changes_summary/
       final_review_report/
       metadata/
-      final.docx
-      final.md
-      review.md
-      changes_summary.docx
-      changes_summary.md
-      run_log.json
-      session_status.json
 
   metadata/
     project.json
@@ -185,13 +165,11 @@ projects/项目实施方案修订_20260615/
 目录用途：
 
 - `final/`：最终修改稿。
-- `reviews/`：每一轮审查意见，例如 `round_01_review.md`、`round_02_review.md`；同时保存 `revision_summary.md/docx`，用于汇总本次运行中各轮 writer 修改和 reviewer 审查情况。新版结构不再额外生成 `reviews/review.md`。
+- `reviews/`：每一轮审查意见，例如 `round_01_review.md`、`round_02_review.md`；同时保存 `revision_summary.md/docx`，用于汇总本次运行中各轮 writer 修改和 reviewer 审查情况。
 - `final_review_report/`：最终人工复核报告，重点列出完成情况、仍需人工确认的问题、事实与格式风险，通常是交付前最值得先看的文件。
-- `changes_summary/`：旧版兼容的修改说明汇总，目前仍会生成，内容与 `reviews/revision_summary.*` 对应，后续确认新版结构稳定后再考虑移除。
 - `metadata/`：程序读取的 manifest、运行日志和状态文件。
-- 版本目录顶层的 `final.docx`、`review.md`、`changes_summary.docx`、`run_log.json` 等是兼容文件，后续确认所有功能稳定支持新版目录后再考虑移除。
 
-程序读取文件时会优先读取 `metadata/manifest.json` 指向的新结构；如果是旧项目、没有 manifest，则自动回退到旧版顶层文件。
+程序读取版本文件时使用 `metadata/manifest.json` 和新版目录结构。
 
 ## 8. Continue 继续修改
 
@@ -224,7 +202,7 @@ dry-run 测试：
 .\scripts\continue_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -DryRun
 ```
 
-continue 会读取上一版 `latest/final.md` 或 `latest/final.docx`，结合 `inputs/feedback.md` 进行整体重写，并输出到：
+continue 会读取上一版 `latest/final/final.md` 或 `latest/final/final.docx`，结合 `inputs/feedback.md` 进行整体重写，并输出到：
 
 ```text
 projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-continue-v2>/
@@ -341,15 +319,17 @@ skip     暂不处理，保持 pending
 
 ```text
 projects/<项目名_YYYYMMDD>/
-  project.json
   inputs/
   outputs/
   dry_run_outputs/
+  metadata/
+    project.json
+    latest.json
 ```
 
-`<项目名>` 会先用本地规则生成。建议在 `requirements.md` 开头写一行 `题目：xxx` 或 `标题：xxx`，程序会优先用它作为项目名；否则优先取 source 文件名，再尝试识别 `调研报告`、`项目实施方案`、`申请书`、`论文` 等文档类型，最后才截取 requirements 内容摘要。真实模型运行结束后，reviewer 会根据最终稿生成 `final_suggested_title`，保存到 `project.json` 和 `metadata/project.json`，并在普通新任务中自动尝试重命名项目目录。`continue_project.ps1` 不会重命名项目目录。目录名会自动清洗 Windows 不允许的字符。
+`<项目名>` 会先用本地规则生成。建议在 `requirements.md` 开头写一行 `题目：xxx` 或 `标题：xxx`，程序会优先用它作为项目名；否则优先取 source 文件名，再尝试识别 `调研报告`、`项目实施方案`、`申请书`、`论文` 等文档类型，最后才截取 requirements 内容摘要。真实模型运行结束后，reviewer 会根据最终稿生成 `final_suggested_title`，保存到 `metadata/project.json`，并在普通新任务中自动尝试重命名项目目录。`continue_project.ps1` 不会重命名项目目录。目录名会自动清洗 Windows 不允许的字符。
 
-如果同一天生成了同名项目，程序会自动新建独立目录，例如 `项目名_20260616_02`、`项目名_20260616_03`，不会把新的独立任务混入旧项目的 v2、v3。只有使用 `continue_project.ps1` 继续修改同一项目时，才会在原项目里递增版本。自动重命名前，终端会提示暂时不要用 Word/WPS/记事本打开本项目文件；如果目录被占用，程序会每 7 秒重试一次，最多重试 3 次。仍失败时不会中断输出，会在 `project.json` 中记录 `rename_status` 和 `rename_reason`。
+如果同一天生成了同名项目，程序会自动新建独立目录，例如 `项目名_20260616_02`、`项目名_20260616_03`，不会把新的独立任务混入旧项目的 v2、v3。只有使用 `continue_project.ps1` 继续修改同一项目时，才会在原项目里递增版本。自动重命名前，终端会提示暂时不要用 Word/WPS/记事本打开本项目文件；如果目录被占用，程序会每 7 秒重试一次，最多重试 3 次。仍失败时不会中断输出，会在 `metadata/project.json` 中记录 `rename_status` 和 `rename_reason`。
 
 dry-run 输出到：
 
@@ -384,7 +364,7 @@ final_review_report/final_review_report.md
 metadata/run_log.json
 ```
 
-`reviews/revision_summary` 是本次运行的多轮修改说明汇总，包含运行概况、输入材料、每轮修改与审查摘要、最终结论，以及自动识别出的“需补充 / 需核实 / 待确认 / TODO”等人工处理事项。旧版兼容目录 `changes_summary/` 目前仍会同步生成一份对应内容。
+`reviews/revision_summary` 是本次运行的多轮修改说明汇总，包含运行概况、输入材料、每轮修改与审查摘要、最终结论，以及自动识别出的“需补充 / 需核实 / 待确认 / TODO”等人工处理事项。
 
 `reviews/revision_summary` 有两种生成方式：
 
@@ -412,7 +392,7 @@ reviewer 审查摘要
 需人工补充或核实事项
 ```
 
-如果 LLM 调用失败，或返回内容无法解析，程序会自动退回规则生成，不影响最终稿输出。可在 `run_log.json` 中查看：
+如果 LLM 调用失败，或返回内容无法解析，程序会自动退回规则生成，不影响最终稿输出。可在 `metadata/run_log.json` 中查看：
 
 ```text
 summary_mode_requested

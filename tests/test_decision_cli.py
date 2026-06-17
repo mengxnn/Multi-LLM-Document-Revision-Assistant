@@ -7,6 +7,29 @@ from unittest.mock import patch
 from office_revision.cli import main
 
 
+def write_latest_metadata(output_root: Path, session: Path) -> None:
+    metadata = output_root.parent / "metadata"
+    metadata.mkdir(parents=True, exist_ok=True)
+    (metadata / "latest.json").write_text(
+        json.dumps(
+            {
+                "session_dir": str(session),
+                "version_dir": session.name,
+                "version": 1,
+                "status": "pending",
+                "output_root": output_root.name,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def write_structured_final(session: Path, text: str) -> None:
+    final_dir = session / "final"
+    final_dir.mkdir(parents=True, exist_ok=True)
+    (final_dir / "final.md").write_text(text, encoding="utf-8")
+
+
 class DecisionCliTests(unittest.TestCase):
     def test_review_project_accept_updates_latest_pending_result(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -14,10 +37,7 @@ class DecisionCliTests(unittest.TestCase):
             output_root = project / "dry_run_outputs"
             session = output_root / "193728-pending-v1"
             session.mkdir(parents=True)
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(session)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(output_root, session)
 
             exit_code = main(
                 [
@@ -39,10 +59,7 @@ class DecisionCliTests(unittest.TestCase):
             output_root = project / "outputs"
             session = output_root / "193728-pending-v1"
             session.mkdir(parents=True)
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(session)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(output_root, session)
 
             exit_code = main(
                 [
@@ -62,10 +79,7 @@ class DecisionCliTests(unittest.TestCase):
             output_root = project / "dry_run_outputs"
             session = output_root / "193728-pending-v1"
             session.mkdir(parents=True)
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(session)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(output_root, session)
 
             exit_code = main(
                 [
@@ -85,10 +99,7 @@ class DecisionCliTests(unittest.TestCase):
             output_root = project / "outputs"
             session = output_root / "193728-pending-v1"
             session.mkdir(parents=True)
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(session)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(output_root, session)
 
             exit_code = main(
                 [
@@ -110,10 +121,7 @@ class DecisionCliTests(unittest.TestCase):
             latest = output_root / "160000-pending-v3"
             older.mkdir(parents=True)
             latest.mkdir()
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(latest)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(output_root, latest)
 
             exit_code = main(
                 [
@@ -136,10 +144,7 @@ class DecisionCliTests(unittest.TestCase):
             latest = output_root / "160000-pending-v3"
             older.mkdir(parents=True)
             latest.mkdir()
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(latest)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(output_root, latest)
 
             exit_code = main(
                 [
@@ -151,8 +156,8 @@ class DecisionCliTests(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            latest_session = json.loads((output_root / "latest_session.json").read_text(encoding="utf-8"))
-            self.assertEqual(Path(latest_session["session_dir"]), latest)
+            latest_metadata = json.loads((project / "metadata" / "latest.json").read_text(encoding="utf-8"))
+            self.assertEqual(Path(latest_metadata["session_dir"]), latest)
 
             exit_code = main(
                 [
@@ -178,12 +183,9 @@ class DecisionCliTests(unittest.TestCase):
             latest.mkdir()
             (inputs / "requirements.md").write_text("Original requirements.", encoding="utf-8")
             (inputs / "feedback.md").write_text("Continue latest.", encoding="utf-8")
-            (older / "final.md").write_text("Older final draft.", encoding="utf-8")
-            (latest / "final.md").write_text("Latest final draft.", encoding="utf-8")
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(latest)}),
-                encoding="utf-8",
-            )
+            write_structured_final(older, "Older final draft.")
+            write_structured_final(latest, "Latest final draft.")
+            write_latest_metadata(output_root, latest)
 
             self.assertEqual(
                 main(["--review-project", str(older), "--decision", "accept"]),
@@ -195,9 +197,9 @@ class DecisionCliTests(unittest.TestCase):
             )
 
             new_session = next(output_root.glob("*-continue-v4"))
-            run_log = json.loads((new_session / "run_log.json").read_text(encoding="utf-8"))
+            run_log = json.loads((new_session / "metadata" / "run_log.json").read_text(encoding="utf-8"))
             self.assertEqual(run_log["previous_output_dir"], str(latest))
-            self.assertIn("Latest final draft.", (new_session / "final.md").read_text(encoding="utf-8"))
+            self.assertIn("Latest final draft.", (new_session / "final" / "final.md").read_text(encoding="utf-8"))
 
     def test_review_project_skip_specific_version_reminder_uses_version_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -9,25 +9,14 @@ from typing import Any
 
 
 ARTIFACT_FALLBACKS = {
-    "final_docx": ("final/final.docx", "final.docx"),
-    "final_md": ("final/final.md", "final.md"),
-    "review_md": ("reviews/review.md", "review.md"),
-    "changes_summary_docx": (
-        "changes_summary/changes_summary.docx",
-        "summaries/changes_summary.docx",
-        "changes_summary.docx",
-    ),
-    "changes_summary_md": (
-        "changes_summary/changes_summary.md",
-        "summaries/changes_summary.md",
-        "changes_summary.md",
-    ),
+    "final_docx": ("final/final.docx",),
+    "final_md": ("final/final.md",),
     "revision_summary_docx": ("reviews/revision_summary.docx",),
     "revision_summary_md": ("reviews/revision_summary.md",),
     "final_review_report_docx": ("final_review_report/final_review_report.docx",),
     "final_review_report_md": ("final_review_report/final_review_report.md",),
-    "run_log": ("metadata/run_log.json", "run_log.json"),
-    "session_status": ("metadata/session_status.json", "session_status.json"),
+    "run_log": ("metadata/run_log.json",),
+    "session_status": ("metadata/session_status.json",),
 }
 
 
@@ -44,16 +33,8 @@ class VersionLayout:
         return self.root / "reviews"
 
     @property
-    def changes_summary_dir(self) -> Path:
-        return self.root / "changes_summary"
-
-    @property
     def final_review_report_dir(self) -> Path:
         return self.root / "final_review_report"
-
-    @property
-    def summaries_dir(self) -> Path:
-        return self.changes_summary_dir
 
     @property
     def metadata_dir(self) -> Path:
@@ -66,18 +47,6 @@ class VersionLayout:
     @property
     def final_md(self) -> Path:
         return self.final_dir / "final.md"
-
-    @property
-    def review_md(self) -> Path:
-        return self.reviews_dir / "review.md"
-
-    @property
-    def summary_docx(self) -> Path:
-        return self.summaries_dir / "changes_summary.docx"
-
-    @property
-    def summary_md(self) -> Path:
-        return self.summaries_dir / "changes_summary.md"
 
     @property
     def revision_summary_docx(self) -> Path:
@@ -107,38 +76,9 @@ class VersionLayout:
     def manifest(self) -> Path:
         return self.metadata_dir / "manifest.json"
 
-    @property
-    def compat_final_docx(self) -> Path:
-        return self.root / "final.docx"
-
-    @property
-    def compat_final_md(self) -> Path:
-        return self.root / "final.md"
-
-    @property
-    def compat_review_md(self) -> Path:
-        return self.root / "review.md"
-
-    @property
-    def compat_summary_docx(self) -> Path:
-        return self.root / "changes_summary.docx"
-
-    @property
-    def compat_summary_md(self) -> Path:
-        return self.root / "changes_summary.md"
-
-    @property
-    def compat_run_log(self) -> Path:
-        return self.root / "run_log.json"
-
-    @property
-    def compat_session_status(self) -> Path:
-        return self.root / "session_status.json"
-
     def ensure_dirs(self) -> None:
         self.final_dir.mkdir(parents=True, exist_ok=True)
         self.reviews_dir.mkdir(parents=True, exist_ok=True)
-        self.changes_summary_dir.mkdir(parents=True, exist_ok=True)
         self.final_review_report_dir.mkdir(parents=True, exist_ok=True)
         self.metadata_dir.mkdir(parents=True, exist_ok=True)
 
@@ -176,14 +116,12 @@ def structured_manifest(
     parent_version: str | None = None,
 ) -> dict[str, Any]:
     round_reviews = [relative_to_version(path, layout.root) for path in round_review_paths]
-    final_review = round_reviews[-1] if round_reviews else relative_to_version(layout.compat_review_md, layout.root)
+    final_review = round_reviews[-1] if round_reviews else ""
     files = {
         "final_docx": relative_to_version(layout.final_docx, layout.root),
         "final_md": relative_to_version(layout.final_md, layout.root),
         "review_md": final_review,
         "round_reviews": round_reviews,
-        "changes_summary_docx": relative_to_version(layout.summary_docx, layout.root),
-        "changes_summary_md": relative_to_version(layout.summary_md, layout.root),
         "revision_summary_docx": relative_to_version(layout.revision_summary_docx, layout.root),
         "revision_summary_md": relative_to_version(layout.revision_summary_md, layout.root),
         "final_review_report_docx": relative_to_version(layout.final_review_report_docx, layout.root),

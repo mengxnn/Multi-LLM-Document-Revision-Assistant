@@ -12,20 +12,19 @@ from office_revision.project_paths import (
 
 
 class ProjectPathsTests(unittest.TestCase):
-    def test_version_layout_uses_structured_paths_and_compatibility_paths(self):
+    def test_version_layout_uses_structured_paths_only(self):
         layout = VersionLayout(Path("193728-pending-v1"))
 
         self.assertEqual(layout.final_md, Path("193728-pending-v1/final/final.md"))
         self.assertEqual(layout.final_docx, Path("193728-pending-v1/final/final.docx"))
-        self.assertEqual(layout.summary_md, Path("193728-pending-v1/changes_summary/changes_summary.md"))
         self.assertEqual(layout.revision_summary_md, Path("193728-pending-v1/reviews/revision_summary.md"))
         self.assertEqual(
             layout.final_review_report_md,
             Path("193728-pending-v1/final_review_report/final_review_report.md"),
         )
         self.assertEqual(layout.run_log, Path("193728-pending-v1/metadata/run_log.json"))
-        self.assertEqual(layout.compat_final_md, Path("193728-pending-v1/final.md"))
-        self.assertEqual(layout.compat_review_md, Path("193728-pending-v1/review.md"))
+        self.assertFalse(hasattr(layout, "compat_final_md"))
+        self.assertFalse(hasattr(layout, "compat_review_md"))
 
     def test_manifest_records_structured_files_and_round_reviews(self):
         layout = VersionLayout(Path("193728-pending-v1"))
@@ -44,17 +43,16 @@ class ProjectPathsTests(unittest.TestCase):
         self.assertEqual(manifest["files"]["final_md"], "final/final.md")
         self.assertEqual(manifest["files"]["review_md"], "reviews/round_01_review.md")
         self.assertEqual(manifest["files"]["round_reviews"], ["reviews/round_01_review.md"])
-        self.assertEqual(manifest["files"]["changes_summary_md"], "changes_summary/changes_summary.md")
+        self.assertNotIn("changes_summary_md", manifest["files"])
         self.assertEqual(manifest["files"]["revision_summary_md"], "reviews/revision_summary.md")
         self.assertEqual(manifest["files"]["final_review_report_md"], "final_review_report/final_review_report.md")
 
-    def test_resolve_artifact_prefers_manifest_then_structured_then_legacy(self):
+    def test_resolve_artifact_prefers_manifest_then_structured_only(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             version_dir = Path(temp_dir)
             layout = VersionLayout(version_dir)
             layout.ensure_dirs()
             layout.final_md.write_text("structured", encoding="utf-8")
-            layout.compat_final_md.write_text("legacy", encoding="utf-8")
 
             write_manifest(
                 layout,
@@ -72,7 +70,8 @@ class ProjectPathsTests(unittest.TestCase):
             self.assertEqual(resolve_artifact(version_dir, "final_md").read_text(encoding="utf-8"), "structured")
 
             layout.final_md.unlink()
-            self.assertEqual(resolve_artifact(version_dir, "final_md").read_text(encoding="utf-8"), "legacy")
+            with self.assertRaises(FileNotFoundError):
+                resolve_artifact(version_dir, "final_md")
 
             data = json.loads(layout.manifest.read_text(encoding="utf-8"))
             data["files"]["final_md"] = "custom/final.md"

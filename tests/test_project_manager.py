@@ -100,8 +100,9 @@ class ProjectManagerTests(unittest.TestCase):
                 (context.inputs_dir / "requirements.md").read_text(encoding="utf-8"),
                 "requirements",
             )
+            self.assertFalse((context.project_dir / "project.json").exists())
             self.assertEqual(
-                json.loads((context.project_dir / "project.json").read_text(encoding="utf-8"))["title"],
+                json.loads((context.project_dir / "metadata" / "project.json").read_text(encoding="utf-8"))["title"],
                 "项目",
             )
 
@@ -121,12 +122,10 @@ class ProjectManagerTests(unittest.TestCase):
 
             write_final_suggested_project_title(context, "项目实施方案终稿")
 
-            root_metadata = json.loads((context.project_dir / "project.json").read_text(encoding="utf-8"))
             structured_metadata = json.loads(
                 (context.project_dir / "metadata" / "project.json").read_text(encoding="utf-8")
             )
-            self.assertEqual(root_metadata["title"], "source")
-            self.assertEqual(root_metadata["final_suggested_title"], "项目实施方案终稿")
+            self.assertFalse((context.project_dir / "project.json").exists())
             self.assertEqual(structured_metadata["final_suggested_title"], "项目实施方案终稿")
 
     def test_finalize_project_title_renames_project_directory_and_updates_metadata(self):

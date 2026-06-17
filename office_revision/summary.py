@@ -50,18 +50,6 @@ def build_changes_summary(result: RevisionResult) -> str:
     return "\n".join(sections).rstrip() + "\n"
 
 
-def write_changes_summary(
-    result: RevisionResult,
-    output_dir: str | Path,
-    summary_text: str | None = None,
-) -> None:
-    target_dir = Path(output_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
-    summary = summary_text if summary_text is not None else build_changes_summary(result)
-    (target_dir / "changes_summary.md").write_text(summary, encoding="utf-8")
-    write_final_docx(summary, target_dir / "changes_summary.docx")
-
-
 def write_revision_summary(summary_text: str, output_dir: str | Path) -> None:
     target_dir = Path(output_dir)
     target_dir.mkdir(parents=True, exist_ok=True)

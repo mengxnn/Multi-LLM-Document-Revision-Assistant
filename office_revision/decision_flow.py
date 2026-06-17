@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .continue_flow import find_latest_output_dir, version_label_from_output_dir
-from .project_manager import write_latest_session, write_session_status
+from .project_manager import write_latest_metadata, write_session_status
 from .project_paths import update_manifest_identity
 
 
@@ -68,7 +68,7 @@ def apply_decision_to_session(
         update_manifest_identity(final_dir, status="pending")
         if update_latest:
             _write_latest_status(root, status="pending", current_version=current_version)
-            write_latest_session(root, final_dir)
+            write_latest_metadata(root, final_dir)
         command_target = final_dir if prefer_session_command else project_dir
         return DecisionResult(
             status="pending",
@@ -96,7 +96,7 @@ def apply_decision_to_session(
     update_manifest_identity(final_dir, status=decision)
     if update_latest:
         _write_latest_status(root, status=decision, current_version=current_version)
-        write_latest_session(root, final_dir)
+        write_latest_metadata(root, final_dir)
 
     message = f"Marked latest result as {decision}: {final_dir}"
     if target_dir != session_dir and not renamed:

@@ -63,16 +63,6 @@ def find_latest_output_dir(output_root: str | Path) -> Path:
         except (KeyError, json.JSONDecodeError, OSError):
             pass
 
-    latest_session = root / "latest_session.json"
-    if latest_session.exists():
-        try:
-            data = json.loads(latest_session.read_text(encoding="utf-8"))
-            session_dir = Path(data["session_dir"])
-            if session_dir.exists():
-                return session_dir
-        except (KeyError, json.JSONDecodeError, OSError):
-            pass
-
     latest = root / "latest"
     if latest.exists():
         return latest
@@ -135,7 +125,14 @@ def _resolve_project_output_root(project_dir: Path, *, dry_run: bool) -> Path:
 
 
 def _has_latest_output(output_root: Path) -> bool:
-    return (output_root / "latest_session.json").exists() or (output_root / "latest").exists()
+    latest_metadata = output_root.parent / "metadata" / "latest.json"
+    if latest_metadata.exists():
+        try:
+            data = json.loads(latest_metadata.read_text(encoding="utf-8"))
+            return data.get("output_root") == output_root.name
+        except (json.JSONDecodeError, OSError):
+            return False
+    return (output_root / "latest").exists()
 
 
 def find_project_requirements_path(inputs_dir: str | Path) -> Path:

@@ -2,8 +2,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from docx import Document
-
 from office_revision.summary import (
     SUMMARY_HEADINGS,
     build_final_review_report,
@@ -13,7 +11,6 @@ from office_revision.summary import (
     extract_manual_attention_items,
     has_required_summary_headings,
     parse_llm_summary_polish,
-    write_changes_summary,
     write_final_review_report,
     write_revision_summary,
 )
@@ -88,31 +85,6 @@ class SummaryTests(unittest.TestCase):
         self.assertIn("最终评分：5", summary)
         self.assertIn("五、需人工补充或核实事项", summary)
         self.assertIn("联系人", summary)
-
-    def test_write_changes_summary_outputs_md_and_docx(self):
-        result = RevisionResult(
-            request=RevisionRequest(source_text="", requirements="Write from scratch.", cycles=1),
-            passes=[
-                RevisionPass(
-                    cycle_index=1,
-                    draft="Draft.",
-                    review="是否继续修改：否\n总体评分：4",
-                    review_continue=False,
-                    review_score=4,
-                )
-            ],
-            stopped_early=True,
-            stop_reason="reviewer_requested_stop",
-        )
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output_dir = Path(temp_dir)
-
-            write_changes_summary(result, output_dir)
-
-            self.assertTrue((output_dir / "changes_summary.md").exists())
-            self.assertTrue((output_dir / "changes_summary.docx").exists())
-            document = Document(output_dir / "changes_summary.docx")
-            self.assertTrue(any("修改说明汇总" in paragraph.text for paragraph in document.paragraphs))
 
     def test_write_revision_summary_outputs_md_and_docx(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -264,23 +236,6 @@ class SummaryTests(unittest.TestCase):
 
         self.assertEqual(parse_llm_summary_polish(plain)["final_review_summary"], "ok")
         self.assertEqual(parse_llm_summary_polish(fenced)["manual_attention_summary"], "none")
-
-    def test_write_changes_summary_can_use_supplied_summary_text(self):
-        result = RevisionResult(
-            request=RevisionRequest(source_text="", requirements="Write from scratch.", cycles=1),
-            passes=[],
-        )
-        supplied_summary = "\n\n".join(SUMMARY_HEADINGS) + "\n\n- LLM generated summary.\n"
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output_dir = Path(temp_dir)
-
-            write_changes_summary(result, output_dir, summary_text=supplied_summary)
-
-            self.assertEqual(
-                (output_dir / "changes_summary.md").read_text(encoding="utf-8"),
-                supplied_summary,
-            )
-
 
 if __name__ == "__main__":
     unittest.main()

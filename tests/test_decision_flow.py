@@ -6,6 +6,23 @@ from pathlib import Path
 from office_revision.decision_flow import apply_session_decision, decision_dir_name
 
 
+def write_latest_metadata(output_root: Path, session: Path) -> None:
+    metadata = output_root.parent / "metadata"
+    metadata.mkdir(parents=True, exist_ok=True)
+    (metadata / "latest.json").write_text(
+        json.dumps(
+            {
+                "session_dir": str(session),
+                "version_dir": session.name,
+                "version": 1,
+                "status": "pending",
+                "output_root": output_root.name,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 class DecisionFlowTests(unittest.TestCase):
     def test_decision_dir_name_replaces_pending_label(self):
         self.assertEqual(
@@ -31,16 +48,13 @@ class DecisionFlowTests(unittest.TestCase):
             "193728-accept-v1",
         )
 
-    def test_accept_renames_pending_directory_and_updates_latest_session(self):
+    def test_accept_renames_pending_directory_and_updates_latest_metadata(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_root = Path(temp_dir) / "outputs"
             session = output_root / "193728-pending-v1"
             session.mkdir(parents=True)
             (output_root / "latest").mkdir()
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(session)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(output_root, session)
 
             result = apply_session_decision(output_root, "accept")
 
@@ -48,9 +62,10 @@ class DecisionFlowTests(unittest.TestCase):
             self.assertEqual(result.session_dir.name, "193728-accept-v1")
             self.assertTrue(result.session_dir.exists())
             self.assertFalse(session.exists())
-            latest_session = json.loads((output_root / "latest_session.json").read_text(encoding="utf-8"))
-            self.assertEqual(Path(latest_session["session_dir"]), result.session_dir)
-            status = json.loads((result.session_dir / "session_status.json").read_text(encoding="utf-8"))
+            latest = json.loads((output_root.parent / "metadata" / "latest.json").read_text(encoding="utf-8"))
+            self.assertEqual(Path(latest["session_dir"]), result.session_dir)
+            self.assertFalse((output_root / "latest_session.json").exists())
+            status = json.loads((result.session_dir / "metadata" / "session_status.json").read_text(encoding="utf-8"))
             self.assertEqual(status["status"], "accept")
 
     def test_abandon_can_rename_previously_accepted_directory(self):
@@ -58,10 +73,7 @@ class DecisionFlowTests(unittest.TestCase):
             output_root = Path(temp_dir) / "outputs"
             session = output_root / "193728-accept-v1"
             session.mkdir(parents=True)
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(session)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(output_root, session)
 
             result = apply_session_decision(output_root, "abandon")
 
@@ -76,10 +88,7 @@ class DecisionFlowTests(unittest.TestCase):
             output_root = Path(temp_dir) / "outputs"
             session = output_root / "193728-pending-v1"
             session.mkdir(parents=True)
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(session)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(output_root, session)
 
             result = apply_session_decision(output_root, "continue")
 
@@ -92,10 +101,7 @@ class DecisionFlowTests(unittest.TestCase):
             output_root = Path(temp_dir) / "outputs"
             session = output_root / "193728-pending-v1"
             session.mkdir(parents=True)
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(session)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(output_root, session)
 
             result = apply_session_decision(output_root, "skip")
 
@@ -103,7 +109,7 @@ class DecisionFlowTests(unittest.TestCase):
             self.assertEqual(result.session_dir, session)
             self.assertIn("--review-project", result.message)
             self.assertTrue(session.exists())
-            status = json.loads((session / "session_status.json").read_text(encoding="utf-8"))
+            status = json.loads((session / "metadata" / "session_status.json").read_text(encoding="utf-8"))
             self.assertEqual(status["status"], "pending")
 
     def test_skip_renames_accepted_directory_back_to_pending(self):
@@ -111,10 +117,7 @@ class DecisionFlowTests(unittest.TestCase):
             output_root = Path(temp_dir) / "outputs"
             session = output_root / "193728-accept-v1"
             session.mkdir(parents=True)
-            (output_root / "latest_session.json").write_text(
-                json.dumps({"session_dir": str(session)}),
-                encoding="utf-8",
-            )
+            write_latest_metadata(output_root, session)
 
             result = apply_session_decision(output_root, "skip")
 
