@@ -9,7 +9,7 @@ from office_revision.continue_flow import FEEDBACK_TEMPLATE
 
 
 def write_structured_final(session: Path, text: str) -> None:
-    final_dir = session / "final"
+    final_dir = session / "final_draft"
     final_dir.mkdir(parents=True, exist_ok=True)
     (final_dir / "final.md").write_text(text, encoding="utf-8")
 
@@ -60,9 +60,9 @@ class ContinueCliTests(unittest.TestCase):
             continue_sessions = list(outputs.glob("*-continue-v2"))
             self.assertEqual(len(continue_sessions), 1)
             session = continue_sessions[0]
-            self.assertTrue((session / "final" / "final.md").exists())
+            self.assertTrue((session / "final_draft" / "final.md").exists())
             self.assertTrue((session / "reviews" / "round_01_review.md").exists())
-            self.assertTrue((outputs / "latest" / "final" / "final.md").exists())
+            self.assertTrue((outputs / "latest" / "final_draft" / "final.md").exists())
             self.assertFalse((session / "final.md").exists())
             self.assertFalse((session / "review.md").exists())
             status = json.loads((session / "metadata" / "session_status.json").read_text(encoding="utf-8"))
@@ -175,7 +175,7 @@ class ContinueCliTests(unittest.TestCase):
             self.assertEqual(len(new_sessions), 1)
             run_log = json.loads((new_sessions[0] / "metadata" / "run_log.json").read_text(encoding="utf-8"))
             self.assertEqual(run_log["previous_output_dir"], str(older))
-            self.assertIn("Older final draft.", (new_sessions[0] / "final" / "final.md").read_text(encoding="utf-8"))
+            self.assertIn("Older final draft.", (new_sessions[0] / "final_draft" / "final.md").read_text(encoding="utf-8"))
 
     def test_continue_project_prints_review_command_for_new_version(self):
         with tempfile.TemporaryDirectory() as temp_dir:

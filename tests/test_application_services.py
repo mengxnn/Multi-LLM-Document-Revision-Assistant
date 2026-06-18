@@ -27,7 +27,7 @@ class ApplicationServiceTests(unittest.TestCase):
                     "version_dir": version.name,
                     "created_at": "2026-06-18 12:00:00",
                     "mode": "real",
-                    "files": {"final_md": "final/final.md"},
+                    "files": {"final_md": "final_draft/final.md"},
                 },
             )
             self._write_latest(project, version)

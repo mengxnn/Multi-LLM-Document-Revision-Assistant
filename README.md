@@ -7,7 +7,7 @@
 -> writer 生成修改稿
 -> reviewer 审查并给下一轮建议
 -> 多轮循环
--> 输出 final/final.docx / final/final.md / reviews/revision_summary.docx / final_review_report/final_review_report.docx
+-> 输出 final_draft/final.docx / final_draft/final.md / reviews/revision_summary.docx / final_review_report/final_review_report.docx
 ```
 
 ## 1. 输入文件
@@ -132,7 +132,7 @@ projects/项目实施方案修订_20260615/
 
   outputs/
     193728-pending-v1/
-      final/
+      final_draft/
         final.docx
         final.md
 
@@ -152,7 +152,7 @@ projects/项目实施方案修订_20260615/
         session_status.json
 
     latest/
-      final/
+      final_draft/
       reviews/
       final_review_report/
       metadata/
@@ -164,7 +164,7 @@ projects/项目实施方案修订_20260615/
 
 目录用途：
 
-- `final/`：最终修改稿。
+- `final_draft/`：本次版本的最终修改稿。
 - `reviews/`：每一轮审查意见，例如 `round_01_review.md`、`round_02_review.md`；同时保存 `revision_summary.md/docx`，用于汇总本次运行中各轮 writer 修改和 reviewer 审查情况。
 - `final_review_report/`：最终人工复核报告，重点列出完成情况、仍需人工确认的问题、事实与格式风险，通常是交付前最值得先看的文件。
 - `metadata/`：程序读取的 manifest、运行日志和状态文件。
@@ -202,7 +202,7 @@ dry-run 测试：
 .\scripts\continue_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -DryRun
 ```
 
-continue 会读取上一版 `latest/final/final.md` 或 `latest/final/final.docx`，结合 `inputs/feedback.md` 进行整体重写，并输出到：
+continue 会读取上一版 `latest/final_draft/final.md` 或 `latest/final_draft/final.docx`，结合 `inputs/feedback.md` 进行整体重写，并输出到：
 
 ```text
 projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-continue-v2>/
@@ -354,8 +354,8 @@ projects/<项目名_YYYYMMDD>/outputs/latest
 主要输出：
 
 ```text
-final/final.docx
-final/final.md
+final_draft/final.docx
+final_draft/final.md
 reviews/round_01_review.md
 reviews/revision_summary.docx
 reviews/revision_summary.md

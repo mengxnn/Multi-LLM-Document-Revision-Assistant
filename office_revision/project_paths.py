@@ -9,8 +9,8 @@ from typing import Any
 
 
 ARTIFACT_FALLBACKS = {
-    "final_docx": ("final/final.docx",),
-    "final_md": ("final/final.md",),
+    "final_docx": ("final_draft/final.docx",),
+    "final_md": ("final_draft/final.md",),
     "revision_summary_docx": ("reviews/revision_summary.docx",),
     "revision_summary_md": ("reviews/revision_summary.md",),
     "final_review_report_docx": ("final_review_report/final_review_report.docx",),
@@ -26,7 +26,7 @@ class VersionLayout:
 
     @property
     def final_dir(self) -> Path:
-        return self.root / "final"
+        return self.root / "final_draft"
 
     @property
     def reviews_dir(self) -> Path:

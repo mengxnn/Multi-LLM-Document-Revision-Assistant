@@ -39,7 +39,7 @@ class CliTests(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            final_text = (output / "final" / "final.md").read_text(encoding="utf-8")
+            final_text = (output / "final_draft" / "final.md").read_text(encoding="utf-8")
             review_text = (output / "reviews" / "round_02_review.md").read_text(encoding="utf-8")
             run_log = json.loads((output / "metadata" / "run_log.json").read_text(encoding="utf-8"))
 
@@ -79,8 +79,9 @@ class CliTests(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            self.assertTrue((output / "final" / "final.md").exists())
-            self.assertTrue((output / "final" / "final.docx").exists())
+            self.assertTrue((output / "final_draft" / "final.md").exists())
+            self.assertTrue((output / "final_draft" / "final.docx").exists())
+            self.assertFalse((output / "final").exists())
             self.assertFalse((output / "final.md").exists())
             self.assertFalse((output / "final.docx").exists())
             self.assertFalse((output / "review.md").exists())
@@ -95,7 +96,7 @@ class CliTests(unittest.TestCase):
             self.assertFalse((output / "changes_summary.docx").exists())
             self.assertTrue((output / "metadata" / "run_log.json").exists())
             self.assertTrue((output / "metadata" / "manifest.json").exists())
-            final_doc = Document(output / "final" / "final.docx")
+            final_doc = Document(output / "final_draft" / "final.docx")
             self.assertIn("第 1 轮修改稿", [paragraph.text for paragraph in final_doc.paragraphs])
 
     def test_check_connections_does_not_require_source_or_requirements(self):
@@ -212,7 +213,7 @@ class CliTests(unittest.TestCase):
             self.assertTrue((project_dir / "metadata" / "project.json").exists())
             self.assertTrue((project_dir / "inputs" / "source.md").exists())
             self.assertTrue((project_dir / "inputs" / "requirements.md").exists())
-            self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "final" / "final.md").exists())
+            self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "final_draft" / "final.md").exists())
             self.assertTrue((project_dir / "dry_run_outputs" / "latest" / "metadata" / "session_status.json").exists())
             self.assertFalse((project_dir / "dry_run_outputs" / "latest" / "final.md").exists())
 
@@ -366,7 +367,7 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             renamed_project = next(projects.glob("调研报告_*"))
-            self.assertTrue((renamed_project / "outputs" / "latest" / "final" / "final.md").exists())
+            self.assertTrue((renamed_project / "outputs" / "latest" / "final_draft" / "final.md").exists())
             self.assertFalse((projects / "source_20260616").exists())
             metadata = json.loads((renamed_project / "metadata" / "project.json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["rename_status"], "renamed")
@@ -449,8 +450,8 @@ class CliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertTrue((output / "final" / "final.md").exists())
-            self.assertTrue((output / "final" / "final.docx").exists())
+            self.assertTrue((output / "final_draft" / "final.md").exists())
+            self.assertTrue((output / "final_draft" / "final.docx").exists())
             self.assertTrue((output / "reviews" / "revision_summary.md").exists())
             self.assertTrue((output / "reviews" / "revision_summary.docx").exists())
             self.assertFalse((output / "final.md").exists())

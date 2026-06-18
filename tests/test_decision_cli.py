@@ -25,7 +25,7 @@ def write_latest_metadata(output_root: Path, session: Path) -> None:
 
 
 def write_structured_final(session: Path, text: str) -> None:
-    final_dir = session / "final"
+    final_dir = session / "final_draft"
     final_dir.mkdir(parents=True, exist_ok=True)
     (final_dir / "final.md").write_text(text, encoding="utf-8")
 
@@ -199,7 +199,7 @@ class DecisionCliTests(unittest.TestCase):
             new_session = next(output_root.glob("*-continue-v4"))
             run_log = json.loads((new_session / "metadata" / "run_log.json").read_text(encoding="utf-8"))
             self.assertEqual(run_log["previous_output_dir"], str(latest))
-            self.assertIn("Latest final draft.", (new_session / "final" / "final.md").read_text(encoding="utf-8"))
+            self.assertIn("Latest final draft.", (new_session / "final_draft" / "final.md").read_text(encoding="utf-8"))
 
     def test_review_project_skip_specific_version_reminder_uses_version_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:

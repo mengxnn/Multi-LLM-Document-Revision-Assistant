@@ -15,8 +15,8 @@ class ProjectPathsTests(unittest.TestCase):
     def test_version_layout_uses_structured_paths_only(self):
         layout = VersionLayout(Path("193728-pending-v1"))
 
-        self.assertEqual(layout.final_md, Path("193728-pending-v1/final/final.md"))
-        self.assertEqual(layout.final_docx, Path("193728-pending-v1/final/final.docx"))
+        self.assertEqual(layout.final_md, Path("193728-pending-v1/final_draft/final.md"))
+        self.assertEqual(layout.final_docx, Path("193728-pending-v1/final_draft/final.docx"))
         self.assertEqual(layout.revision_summary_md, Path("193728-pending-v1/reviews/revision_summary.md"))
         self.assertEqual(
             layout.final_review_report_md,
@@ -40,7 +40,7 @@ class ProjectPathsTests(unittest.TestCase):
         )
 
         self.assertEqual(manifest["schema_version"], 1)
-        self.assertEqual(manifest["files"]["final_md"], "final/final.md")
+        self.assertEqual(manifest["files"]["final_md"], "final_draft/final.md")
         self.assertEqual(manifest["files"]["review_md"], "reviews/round_01_review.md")
         self.assertEqual(manifest["files"]["round_reviews"], ["reviews/round_01_review.md"])
         self.assertNotIn("changes_summary_md", manifest["files"])
