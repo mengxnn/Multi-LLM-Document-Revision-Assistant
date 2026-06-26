@@ -6,6 +6,7 @@ from pathlib import Path
 from office_revision.application import (
     ArtifactLinks,
     ContinueRevisionRequest,
+    DeleteProjectResult,
     ProgressEvent,
     RevisionApplication,
     RevisionApplicationError,
@@ -83,6 +84,32 @@ class ApplicationServiceTests(unittest.TestCase):
         self.assertIs(returned, result)
         self.assertEqual(service.calls[0][0], request)
         self.assertEqual(request.summary_mode, "rule")
+
+    def test_delete_project_contract_and_facade_method(self):
+        result = DeleteProjectResult(
+            project_id="Project_20260626",
+            deleted_path=Path("projects/Project_20260626"),
+            trash_path=Path("projects/.trash/Project_20260626_deleted_20260626_120000"),
+            permanent=False,
+            message="deleted",
+        )
+
+        class DeletionService:
+            def __init__(self):
+                self.calls = []
+
+            def delete_project(self, project, *, permanent=False, deleted_at=None):
+                self.calls.append((project, permanent, deleted_at))
+                return result
+
+        service = DeletionService()
+        app = RevisionApplication(deletion_service=service)
+
+        returned = app.delete_project("Project_20260626", deleted_at="20260626_120000")
+
+        self.assertIs(returned, result)
+        self.assertEqual(service.calls[0], ("Project_20260626", False, "20260626_120000"))
+        self.assertFalse(result.permanent)
 
     def test_lists_projects_and_returns_structured_version_details(self):
         with tempfile.TemporaryDirectory() as temp_dir:

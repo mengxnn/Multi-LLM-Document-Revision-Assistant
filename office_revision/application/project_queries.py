@@ -26,7 +26,11 @@ class ProjectQueryService:
     def list_projects(self) -> tuple[ProjectSummary, ...]:
         if not self.projects_root.exists():
             return ()
-        projects = [self._summary(path) for path in self.projects_root.iterdir() if path.is_dir()]
+        projects = [
+            self._summary(path)
+            for path in self.projects_root.iterdir()
+            if path.is_dir() and not path.name.startswith(".")
+        ]
         projects.sort(key=lambda item: (item.created_date, item.project_id), reverse=True)
         return tuple(projects)
 

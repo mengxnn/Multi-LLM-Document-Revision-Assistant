@@ -54,6 +54,15 @@ class DecisionOutcome:
 
 
 @dataclass(frozen=True)
+class DeleteProjectResult:
+    project_id: str
+    deleted_path: Path
+    trash_path: Path | None
+    permanent: bool
+    message: str
+
+
+@dataclass(frozen=True)
 class ModelConnectionStatus:
     role: str
     model: str

@@ -5,6 +5,7 @@ from typing import Callable
 
 from .contracts import (
     ContinueRevisionRequest,
+    DeleteProjectResult,
     DecisionOutcome,
     ModelConnectionStatus,
     ProgressEvent,
@@ -15,6 +16,7 @@ from .contracts import (
 )
 from .continued_revisions import ContinuedRevisionService
 from .model_connections import ModelConnectionService
+from .project_deletions import ProjectDeletionService
 from .new_projects import NewProjectService
 from .project_queries import ProjectQueryService
 from .revision_decisions import DecisionService
@@ -31,12 +33,14 @@ class RevisionApplication:
         connection_service: ModelConnectionService | None = None,
         new_project_service: NewProjectService | None = None,
         continued_revision_service: ContinuedRevisionService | None = None,
+        deletion_service: ProjectDeletionService | None = None,
     ) -> None:
         self.project_queries = project_service or ProjectQueryService(projects_root)
         self.revision_decisions = decision_service or DecisionService(self.project_queries)
         self.model_connections = connection_service or ModelConnectionService(config_path)
         self.new_projects = new_project_service or NewProjectService(projects_root, config_path)
         self.continued_revisions = continued_revision_service or ContinuedRevisionService(projects_root, config_path)
+        self.project_deletions = deletion_service or ProjectDeletionService(projects_root, self.project_queries)
 
     def start_new_project(
         self,
@@ -73,6 +77,19 @@ class RevisionApplication:
             decision,
             version_dir=version_dir,
             dry_run=dry_run,
+        )
+
+    def delete_project(
+        self,
+        project: str | Path,
+        *,
+        permanent: bool = False,
+        deleted_at: str | None = None,
+    ) -> DeleteProjectResult:
+        return self.project_deletions.delete_project(
+            project,
+            permanent=permanent,
+            deleted_at=deleted_at,
         )
 
     def check_model_connections(self) -> tuple[ModelConnectionStatus, ...]:
