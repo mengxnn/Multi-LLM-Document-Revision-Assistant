@@ -88,6 +88,20 @@ class StartProjectRequest:
 
 
 @dataclass(frozen=True)
+class ContinueRevisionRequest:
+    project_id: str | Path
+    feedback_path: str | Path | None = None
+    feedback_text: str | None = None
+    cycles: int = 2
+    dry_run: bool = False
+    summary_mode: str = "rule"
+    writer_model: str | None = None
+    reviewer_model: str | None = None
+    writer_prompt_path: str | Path = Path("config/writer_system_prompt.md")
+    reviewer_prompt_path: str | Path = Path("config/reviewer_system_prompt.md")
+
+
+@dataclass(frozen=True)
 class ProgressEvent:
     stage: str
     message: str

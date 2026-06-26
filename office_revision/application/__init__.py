@@ -1,5 +1,6 @@
 from .contracts import (
     ArtifactLinks,
+    ContinueRevisionRequest,
     DecisionOutcome,
     ModelConnectionStatus,
     ProjectDetail,
@@ -14,6 +15,7 @@ from .revision_application import RevisionApplication
 
 __all__ = [
     "ArtifactLinks",
+    "ContinueRevisionRequest",
     "DecisionOutcome",
     "ModelConnectionStatus",
     "ProjectDetail",

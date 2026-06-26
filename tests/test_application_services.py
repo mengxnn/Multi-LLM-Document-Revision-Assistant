@@ -5,6 +5,7 @@ from pathlib import Path
 
 from office_revision.application import (
     ArtifactLinks,
+    ContinueRevisionRequest,
     ProgressEvent,
     RevisionApplication,
     RevisionApplicationError,
@@ -48,6 +49,40 @@ class ApplicationServiceTests(unittest.TestCase):
         self.assertEqual(timed_event.display_message(), "writer round completed（1/2，用时 12.3 秒）")
         self.assertEqual(result.version, 1)
         self.assertTrue(issubclass(RevisionApplicationError, Exception))
+
+    def test_continue_revision_contract_and_facade_method(self):
+        request = ContinueRevisionRequest(project_id="Project_20260626", feedback_text="Revise it.")
+        result = RevisionRunResult(
+            project_id="Project_20260626",
+            project_path=Path("projects/Project_20260626"),
+            version=2,
+            version_path=Path("projects/Project_20260626/outputs/120000-continue-v2"),
+            latest_path=Path("projects/Project_20260626/outputs/latest"),
+            status="continue",
+            mode="real",
+            requested_cycles=2,
+            actual_cycles=2,
+            stopped_early=False,
+            stop_reason=None,
+            artifacts=ArtifactLinks(),
+        )
+
+        class ContinueService:
+            def __init__(self):
+                self.calls = []
+
+            def continue_existing_revision(self, request_arg, *, on_progress=None):
+                self.calls.append((request_arg, on_progress))
+                return result
+
+        service = ContinueService()
+        app = RevisionApplication(continued_revision_service=service)
+
+        returned = app.continue_existing_revision(request, on_progress=lambda event: None)
+
+        self.assertIs(returned, result)
+        self.assertEqual(service.calls[0][0], request)
+        self.assertEqual(request.summary_mode, "rule")
 
     def test_lists_projects_and_returns_structured_version_details(self):
         with tempfile.TemporaryDirectory() as temp_dir:

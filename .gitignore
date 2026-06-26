@@ -23,3 +23,4 @@ config/settings.env
 
 # Local manual smoke-test scripts.
 test_start_project.py
+test_continue_revision.py

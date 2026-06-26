@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Callable
 
 from .contracts import (
+    ContinueRevisionRequest,
     DecisionOutcome,
     ModelConnectionStatus,
     ProgressEvent,
@@ -12,6 +13,7 @@ from .contracts import (
     RevisionRunResult,
     StartProjectRequest,
 )
+from .continued_revisions import ContinuedRevisionService
 from .model_connections import ModelConnectionService
 from .new_projects import NewProjectService
 from .project_queries import ProjectQueryService
@@ -28,11 +30,13 @@ class RevisionApplication:
         decision_service: DecisionService | None = None,
         connection_service: ModelConnectionService | None = None,
         new_project_service: NewProjectService | None = None,
+        continued_revision_service: ContinuedRevisionService | None = None,
     ) -> None:
         self.project_queries = project_service or ProjectQueryService(projects_root)
         self.revision_decisions = decision_service or DecisionService(self.project_queries)
         self.model_connections = connection_service or ModelConnectionService(config_path)
         self.new_projects = new_project_service or NewProjectService(projects_root, config_path)
+        self.continued_revisions = continued_revision_service or ContinuedRevisionService(projects_root, config_path)
 
     def start_new_project(
         self,
@@ -41,6 +45,14 @@ class RevisionApplication:
         on_progress: Callable[[ProgressEvent], None] | None = None,
     ) -> RevisionRunResult:
         return self.new_projects.start_new_project(request, on_progress=on_progress)
+
+    def continue_existing_revision(
+        self,
+        request: ContinueRevisionRequest,
+        *,
+        on_progress: Callable[[ProgressEvent], None] | None = None,
+    ) -> RevisionRunResult:
+        return self.continued_revisions.continue_existing_revision(request, on_progress=on_progress)
 
     def list_projects(self) -> tuple[ProjectSummary, ...]:
         return self.project_queries.list_projects()
