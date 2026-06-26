@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
+from typing import Any, Callable
 
 from .config import ModelSettings, read_optional_text
 from .review_analysis import parse_review_decision
@@ -17,6 +17,7 @@ from .workflow import (
     RevisionRequest,
     RevisionResult,
     WriterContext,
+    _emit_progress,
 )
 
 
@@ -196,6 +197,7 @@ async def _run_autogen_revision_loop_async(
     reviewer_settings: ModelSettings,
     writer_prompt_path: str = "config/writer_system_prompt.md",
     reviewer_prompt_path: str = "config/reviewer_system_prompt.md",
+    on_progress: Callable[[str, int, int, float | None], None] | None = None,
 ):
     AssistantAgent, OpenAIChatCompletionClient = _optional_imports()
     writer_client = _model_client(OpenAIChatCompletionClient, writer_settings)
@@ -233,13 +235,18 @@ async def _run_autogen_revision_loop_async(
         return await _run_role_task("reviewer", context.cycle_index, reviewer_settings.model, call, stages=stages)
 
     try:
-        return await _run_async_revision_loop(request, writer=write, reviewer=review)
+        return await _run_async_revision_loop(
+            request,
+            writer=write,
+            reviewer=review,
+            on_progress=on_progress,
+        )
     finally:
         await writer_client.close()
         await reviewer_client.close()
 
 
-async def _run_async_revision_loop(request, *, writer, reviewer):
+async def _run_async_revision_loop(request, *, writer, reviewer, on_progress=None):
     if request.cycles <= 0:
         raise ValueError("cycles must be greater than 0")
 
@@ -250,6 +257,8 @@ async def _run_async_revision_loop(request, *, writer, reviewer):
     for cycle_index in range(1, request.cycles + 1):
         source_text = request.source_text if cycle_index == 1 else ""
         meeting_notes = request.meeting_notes if cycle_index == 1 else ""
+        _emit_progress(on_progress, "writer_running", cycle_index, request.cycles)
+        started_at = time.perf_counter()
         draft = await writer(
             WriterContext(
                 source_text=source_text,
@@ -261,6 +270,15 @@ async def _run_async_revision_loop(request, *, writer, reviewer):
                 previous_writer_instructions=previous_writer_instructions,
             )
         )
+        _emit_progress(
+            on_progress,
+            "writer_completed",
+            cycle_index,
+            request.cycles,
+            time.perf_counter() - started_at,
+        )
+        _emit_progress(on_progress, "reviewer_running", cycle_index, request.cycles)
+        started_at = time.perf_counter()
         review = await reviewer(
             ReviewContext(
                 source_text=source_text,
@@ -270,6 +288,13 @@ async def _run_async_revision_loop(request, *, writer, reviewer):
                 draft=draft,
                 previous_review=previous_review,
             )
+        )
+        _emit_progress(
+            on_progress,
+            "reviewer_completed",
+            cycle_index,
+            request.cycles,
+            time.perf_counter() - started_at,
         )
         decision = parse_review_decision(review)
         passes.append(
@@ -303,6 +328,7 @@ def run_autogen_revision_loop(
     reviewer_settings: ModelSettings,
     writer_prompt_path: str = "config/writer_system_prompt.md",
     reviewer_prompt_path: str = "config/reviewer_system_prompt.md",
+    on_progress: Callable[[str, int, int, float | None], None] | None = None,
 ):
     return asyncio.run(
         _run_autogen_revision_loop_async(
@@ -311,6 +337,7 @@ def run_autogen_revision_loop(
             reviewer_settings=reviewer_settings,
             writer_prompt_path=writer_prompt_path,
             reviewer_prompt_path=reviewer_prompt_path,
+            on_progress=on_progress,
         )
     )
 

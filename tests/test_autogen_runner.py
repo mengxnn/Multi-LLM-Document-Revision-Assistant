@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
@@ -14,6 +15,39 @@ from office_revision.workflow import RevisionPass, RevisionRequest, RevisionResu
 
 
 class AutogenRunnerTests(unittest.TestCase):
+    def test_async_loop_emits_cycle_progress(self):
+        events = []
+
+        async def writer(context):
+            return "draft"
+
+        async def reviewer(context):
+            return "\u662f\u5426\u7ee7\u7eed\u4fee\u6539\uff1a\u5426"
+
+        result = asyncio.run(
+            _run_async_revision_loop(
+                RevisionRequest(source_text="source", requirements="requirements", cycles=3),
+                writer=writer,
+                reviewer=reviewer,
+                on_progress=lambda stage, cycle, total, elapsed_seconds=None: events.append(
+                    (stage, cycle, total, elapsed_seconds)
+                ),
+            )
+        )
+
+        self.assertTrue(result.stopped_early)
+        self.assertEqual(
+            [event[:3] for event in events],
+            [
+                ("writer_running", 1, 3),
+                ("writer_completed", 1, 3),
+                ("reviewer_running", 1, 3),
+                ("reviewer_completed", 1, 3),
+            ],
+        )
+        completed_events = [event for event in events if event[0].endswith("_completed")]
+        self.assertTrue(all(isinstance(event[3], float) for event in completed_events))
+
     def test_model_client_kwargs_use_role_specific_settings(self):
         settings = ModelSettings(
             role="WRITER",

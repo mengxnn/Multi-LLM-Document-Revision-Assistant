@@ -1,9 +1,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
-from .contracts import DecisionOutcome, ModelConnectionStatus, ProjectDetail, ProjectSummary
+from .contracts import (
+    DecisionOutcome,
+    ModelConnectionStatus,
+    ProgressEvent,
+    ProjectDetail,
+    ProjectSummary,
+    RevisionRunResult,
+    StartProjectRequest,
+)
 from .model_connections import ModelConnectionService
+from .new_projects import NewProjectService
 from .project_queries import ProjectQueryService
 from .revision_decisions import DecisionService
 
@@ -17,10 +27,20 @@ class RevisionApplication:
         project_service: ProjectQueryService | None = None,
         decision_service: DecisionService | None = None,
         connection_service: ModelConnectionService | None = None,
+        new_project_service: NewProjectService | None = None,
     ) -> None:
         self.project_queries = project_service or ProjectQueryService(projects_root)
         self.revision_decisions = decision_service or DecisionService(self.project_queries)
         self.model_connections = connection_service or ModelConnectionService(config_path)
+        self.new_projects = new_project_service or NewProjectService(projects_root, config_path)
+
+    def start_new_project(
+        self,
+        request: StartProjectRequest,
+        *,
+        on_progress: Callable[[ProgressEvent], None] | None = None,
+    ) -> RevisionRunResult:
+        return self.new_projects.start_new_project(request, on_progress=on_progress)
 
     def list_projects(self) -> tuple[ProjectSummary, ...]:
         return self.project_queries.list_projects()

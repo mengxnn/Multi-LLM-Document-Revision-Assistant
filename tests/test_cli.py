@@ -14,13 +14,24 @@ from office_revision.connection_test import ConnectionCheckResult
 from office_revision.workflow import RevisionPass, RevisionRequest, RevisionResult
 
 
+def only_version(projects_root: Path, *, dry_run: bool = True) -> Path:
+    project = next(path for path in projects_root.iterdir() if path.is_dir())
+    output_root = project / ("dry_run_outputs" if dry_run else "outputs")
+    return next(path for path in output_root.iterdir() if path.is_dir() and path.name != "latest")
+
+
 class CliTests(unittest.TestCase):
+    def test_output_dir_option_is_removed(self):
+        parser = main.__globals__["build_parser"]()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--output-dir", "custom/out"])
+
     def test_dry_run_writes_expected_output_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             source = root / "source.md"
             requirements = root / "requirements.md"
-            output = root / "output"
+            projects = root / "projects"
             source.write_text("原始项目方案。", encoding="utf-8")
             requirements.write_text("补充目标和进度安排。", encoding="utf-8")
 
@@ -30,8 +41,8 @@ class CliTests(unittest.TestCase):
                     str(source),
                     "--requirements",
                     str(requirements),
-                    "--output-dir",
-                    str(output),
+                    "--projects-root",
+                    str(projects),
                     "--cycles",
                     "2",
                     "--dry-run",
@@ -39,6 +50,7 @@ class CliTests(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
+            output = only_version(projects)
             final_text = (output / "final_draft" / "final.md").read_text(encoding="utf-8")
             review_text = (output / "reviews" / "round_02_review.md").read_text(encoding="utf-8")
             run_log = json.loads((output / "metadata" / "run_log.json").read_text(encoding="utf-8"))
@@ -57,7 +69,7 @@ class CliTests(unittest.TestCase):
             root = Path(temp_dir)
             source = root / "source.docx"
             requirements = root / "requirements.md"
-            output = root / "output"
+            projects = root / "projects"
             document = Document()
             document.add_heading("项目实施方案", level=1)
             document.add_paragraph("原始项目方案。")
@@ -70,8 +82,8 @@ class CliTests(unittest.TestCase):
                     str(source),
                     "--requirements",
                     str(requirements),
-                    "--output-dir",
-                    str(output),
+                    "--projects-root",
+                    str(projects),
                     "--cycles",
                     "1",
                     "--dry-run",
@@ -79,6 +91,7 @@ class CliTests(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
+            output = only_version(projects)
             self.assertTrue((output / "final_draft" / "final.md").exists())
             self.assertTrue((output / "final_draft" / "final.docx").exists())
             self.assertFalse((output / "final").exists())
@@ -130,46 +143,13 @@ class CliTests(unittest.TestCase):
         dry_run_args = main.__globals__["build_parser"]().parse_args(["--dry-run"])
         real_args = main.__globals__["build_parser"]().parse_args([])
 
-        self.assertEqual(main.__globals__["default_output_dir"](dry_run_args), Path("outputs/demo/latest"))
-        self.assertEqual(main.__globals__["default_output_dir"](real_args), Path("outputs/autogen/latest"))
+        self.assertTrue(dry_run_args.dry_run)
+        self.assertFalse(real_args.dry_run)
+        self.assertEqual(dry_run_args.projects_root, "projects")
 
     def test_default_run_output_dirs_include_timestamp_and_latest(self):
-        dry_run_args = main.__globals__["build_parser"]().parse_args(["--dry-run"])
-        real_args = main.__globals__["build_parser"]().parse_args([])
-        explicit_args = main.__globals__["build_parser"]().parse_args(["--output-dir", "custom/out"])
-        project_dir = Path("projects/Project_20260611")
-
-        self.assertEqual(
-            main.__globals__["default_run_output_dirs"](dry_run_args, "093000", project_dir=project_dir),
-            [
-                Path("projects/Project_20260611/dry_run_outputs/093000-pending-v1"),
-                Path("projects/Project_20260611/dry_run_outputs/latest"),
-            ],
-        )
-        self.assertEqual(
-            main.__globals__["default_run_output_dirs"](real_args, "093000", project_dir=project_dir),
-            [
-                Path("projects/Project_20260611/outputs/093000-pending-v1"),
-                Path("projects/Project_20260611/outputs/latest"),
-            ],
-        )
-        self.assertEqual(
-            main.__globals__["default_run_output_dirs"](explicit_args, "20260610_093000"),
-            [Path("custom/out")],
-        )
-
-        self.assertEqual(
-            main.__globals__["default_run_output_dirs"](
-                dry_run_args,
-                "093000",
-                project_dir=project_dir,
-                version=2,
-            ),
-            [
-                Path("projects/Project_20260611/dry_run_outputs/093000-pending-v2"),
-                Path("projects/Project_20260611/dry_run_outputs/latest"),
-            ],
-        )
+        args = main.__globals__["build_parser"]().parse_args(["--projects-root", "custom/projects"])
+        self.assertEqual(args.projects_root, "custom/projects")
 
     def test_locked_latest_directory_is_skipped_without_failure(self):
         temp_dir = tempfile.TemporaryDirectory()
@@ -245,7 +225,7 @@ class CliTests(unittest.TestCase):
             printed = "\n".join(str(call.args[0]) for call in print_mock.call_args_list)
             self.assertIn("使用下面的命令进行状态标记", printed)
             self.assertIn(f'-ProjectDir "{session_dir}"', printed)
-            self.assertEqual(printed.count("正在生成最终人工复核报告 final_review_report"), 1)
+            self.assertEqual(printed.count("生成最终人工复核报告"), 1)
 
     def test_default_dry_run_creates_unique_project_directory_when_same_name_exists(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -259,7 +239,7 @@ class CliTests(unittest.TestCase):
             (inputs / "requirements.md").write_text("Improve it.", encoding="utf-8")
 
             with patch("office_revision.cli.DEFAULT_INPUT_DIR", inputs), patch(
-                "office_revision.cli.datetime"
+                "office_revision.application.new_projects.datetime"
             ) as fake_datetime:
                 fake_datetime.now.return_value.strftime.side_effect = lambda fmt: {
                     "%Y%m%d": "20260612",
@@ -357,10 +337,10 @@ class CliTests(unittest.TestCase):
             )
 
             with patch("office_revision.cli.DEFAULT_INPUT_DIR", inputs), patch(
-                "office_revision.autogen_runner.run_autogen_revision_loop",
+                "office_revision.application.new_projects.run_autogen_revision_loop",
                 return_value=fake_result,
             ), patch(
-                "office_revision.cli.generate_final_suggested_project_title",
+                "office_revision.application.new_projects.generate_llm_project_title",
                 return_value="调研报告",
             ), patch("builtins.print") as print_mock:
                 exit_code = main(["--projects-root", str(projects), "--cycles", "1"])
@@ -391,7 +371,7 @@ class CliTests(unittest.TestCase):
             root = Path(temp_dir)
             source = root / "source.docx"
             requirements = root / "requirements.md"
-            output = root / "output"
+            projects = root / "projects"
             document = Document()
             document.add_heading("Project Plan", level=1)
             document.add_paragraph("Original draft.")
@@ -404,8 +384,8 @@ class CliTests(unittest.TestCase):
                     str(source),
                     "--requirements",
                     str(requirements),
-                    "--output-dir",
-                    str(output),
+                    "--projects-root",
+                    str(projects),
                     "--cycles",
                     "2",
                     "--dry-run",
@@ -413,6 +393,7 @@ class CliTests(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
+            output = only_version(projects)
             self.assertTrue((output / "drafts" / "round_01_draft.md").exists())
             self.assertTrue((output / "drafts" / "round_01_draft.docx").exists())
             self.assertTrue((output / "drafts" / "round_02_draft.md").exists())
@@ -432,7 +413,7 @@ class CliTests(unittest.TestCase):
             root = Path(temp_dir)
             inputs = root / "inputs"
             requirements = root / "requirements.md"
-            output = root / "output"
+            projects = root / "projects"
             inputs.mkdir()
             requirements.write_text("Write a plan from scratch.", encoding="utf-8")
 
@@ -441,8 +422,8 @@ class CliTests(unittest.TestCase):
                     [
                         "--requirements",
                         str(requirements),
-                        "--output-dir",
-                        str(output),
+                        "--projects-root",
+                        str(projects),
                         "--cycles",
                         "1",
                         "--dry-run",
@@ -450,6 +431,7 @@ class CliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
+            output = only_version(projects)
             self.assertTrue((output / "final_draft" / "final.md").exists())
             self.assertTrue((output / "final_draft" / "final.docx").exists())
             self.assertTrue((output / "reviews" / "revision_summary.md").exists())
@@ -466,7 +448,7 @@ class CliTests(unittest.TestCase):
             source = root / "source.md"
             requirements = root / "requirements.md"
             meeting_notes = root / "meeting_notes.md"
-            output = root / "output"
+            projects = root / "projects"
             source.write_text("   \n", encoding="utf-8")
             requirements.write_text("Write a plan.", encoding="utf-8")
             meeting_notes.write_text("   \n", encoding="utf-8")
@@ -479,8 +461,8 @@ class CliTests(unittest.TestCase):
                     str(requirements),
                     "--meeting-notes",
                     str(meeting_notes),
-                    "--output-dir",
-                    str(output),
+                    "--projects-root",
+                    str(projects),
                     "--cycles",
                     "1",
                     "--dry-run",
@@ -488,6 +470,7 @@ class CliTests(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
+            output = only_version(projects)
             run_log = json.loads((output / "metadata" / "run_log.json").read_text(encoding="utf-8"))
             self.assertEqual(run_log["source_path"], str(source))
             self.assertEqual(run_log["meeting_notes_path"], str(meeting_notes))
@@ -498,15 +481,16 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             inputs = root / "inputs"
-            output = root / "output"
+            projects = root / "projects"
             inputs.mkdir()
             (inputs / "source.md").write_text("Markdown source text.", encoding="utf-8")
             (inputs / "requirements.md").write_text("Improve it.", encoding="utf-8")
 
             with patch("office_revision.cli.DEFAULT_INPUT_DIR", inputs):
-                exit_code = main(["--output-dir", str(output), "--cycles", "1", "--dry-run"])
+                exit_code = main(["--projects-root", str(projects), "--cycles", "1", "--dry-run"])
 
             self.assertEqual(exit_code, 0)
+            output = only_version(projects)
             run_log = json.loads((output / "metadata" / "run_log.json").read_text(encoding="utf-8"))
             self.assertTrue(run_log["has_source"])
             self.assertEqual(run_log["source_path"], str(inputs / "source.md"))
@@ -522,31 +506,52 @@ class CliTests(unittest.TestCase):
                     [
                         "--requirements",
                         str(empty_requirements),
-                        "--output-dir",
-                        str(root / "output"),
+                        "--projects-root",
+                        str(root / "projects"),
                         "--dry-run",
                     ]
                 )
 
             self.assertIn("requirements", str(raised.exception))
 
+    def test_explicit_missing_source_stops_instead_of_starting_without_source(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            requirements = root / "requirements.md"
+            requirements.write_text("Write a plan.", encoding="utf-8")
+
+            with self.assertRaises(SystemExit) as raised:
+                main(
+                    [
+                        "--source",
+                        str(root / "missing.docx"),
+                        "--requirements",
+                        str(requirements),
+                        "--projects-root",
+                        str(root / "projects"),
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertIn("source file not found", str(raised.exception))
+
     def test_llm_summary_mode_falls_back_to_rule_summary_when_generation_fails(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             requirements = root / "requirements.md"
-            output = root / "output"
+            projects = root / "projects"
             requirements.write_text("Write a plan.", encoding="utf-8")
 
             with patch(
-                "office_revision.cli.generate_llm_changes_summary",
+                "office_revision.revision_outputs.generate_llm_changes_summary",
                 side_effect=RuntimeError("summary model unavailable"),
             ):
                 exit_code = main(
                     [
                         "--requirements",
                         str(requirements),
-                        "--output-dir",
-                        str(output),
+                        "--projects-root",
+                        str(projects),
                         "--cycles",
                         "1",
                         "--dry-run",
@@ -556,6 +561,7 @@ class CliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
+            output = only_version(projects)
             self.assertTrue((output / "reviews" / "revision_summary.md").exists())
             self.assertFalse((output / "changes_summary.md").exists())
             run_log = json.loads((output / "metadata" / "run_log.json").read_text(encoding="utf-8"))

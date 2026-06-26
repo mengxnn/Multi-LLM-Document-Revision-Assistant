@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
+from .application import RevisionApplication, RevisionApplicationError, StartProjectRequest
+
 from .config import load_env_file, load_role_settings, merged_env_values
 from .continue_flow import (
     build_continue_requirements,
@@ -79,14 +81,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional meeting notes text/Markdown file. Empty files are ignored.",
     )
     parser.add_argument(
-        "--output-dir",
-        default=None,
-        help="Directory for final.md, review.md, and run_log.json.",
-    )
-    parser.add_argument(
         "--projects-root",
         default="projects",
-        help="Root directory for managed project folders when --output-dir is not set.",
+        help="Root directory for managed project folders.",
     )
     parser.add_argument(
         "--continue-project",
@@ -246,30 +243,6 @@ def write_round_outputs(result: RevisionResult, output_dir: Path, source_path: P
     return review_paths
 
 
-def default_output_dir(args) -> Path:
-    if args.output_dir:
-        return Path(args.output_dir)
-    if args.dry_run:
-        return Path("outputs/demo/latest")
-    return Path("outputs/autogen/latest")
-
-
-def default_run_output_dirs(
-    args,
-    timestamp: str | None = None,
-    *,
-    project_dir: Path | None = None,
-    version: int = 1,
-) -> list[Path]:
-    if args.output_dir:
-        return [Path(args.output_dir)]
-    run_timestamp = timestamp or datetime.now().strftime("%H%M%S")
-    if project_dir is None:
-        project_dir = Path("projects") / f"document_{datetime.now().strftime('%Y%m%d')}"
-    base_dir = project_dir / ("dry_run_outputs" if args.dry_run else "outputs")
-    return [base_dir / f"{run_timestamp}-pending-v{version}", base_dir / "latest"]
-
-
 def resolve_project_output_root(project_dir: Path, *, dry_run: bool) -> Path:
     if dry_run:
         return project_dir / "dry_run_outputs"
@@ -314,8 +287,7 @@ def resolve_requirements_path(path_arg: str | None) -> Path:
 
 def resolve_source_path(path_arg: str | None) -> Path | None:
     if path_arg:
-        path = Path(path_arg)
-        return path if path.exists() else None
+        return Path(path_arg)
     for candidate in SOURCE_CANDIDATES:
         path = DEFAULT_INPUT_DIR / candidate
         if path.exists():
@@ -325,8 +297,7 @@ def resolve_source_path(path_arg: str | None) -> Path | None:
 
 def resolve_meeting_notes_path(path_arg: str | None) -> Path | None:
     if path_arg:
-        path = Path(path_arg)
-        return path if path.exists() else None
+        return Path(path_arg)
     path = DEFAULT_INPUT_DIR / "meeting_notes.md"
     return path if path.exists() else None
 
@@ -653,117 +624,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     source_path = resolve_source_path(args.source)
     requirements_path = resolve_requirements_path(args.requirements)
     meeting_notes_path = resolve_meeting_notes_path(args.meeting_notes)
-    source_text = read_optional_document_text(source_path)
-    requirements = read_required_text(requirements_path, "requirements")
-    meeting_notes = read_optional_document_text(meeting_notes_path)
-
-    project_context = None
-    if not args.output_dir:
-        now = datetime.now()
-        project_title = choose_project_title(
-            args,
-            source_path=source_path,
-            source_text=source_text,
-            requirements=requirements,
-            meeting_notes=meeting_notes,
-            reviewer_settings=reviewer_settings,
+    app = RevisionApplication(projects_root=args.projects_root, config_path=args.config)
+    try:
+        result = app.start_new_project(
+            StartProjectRequest(
+                requirements_path=requirements_path,
+                source_path=source_path,
+                meeting_notes_path=meeting_notes_path,
+                project_title=args.project_title,
+                project_title_language=args.project_title_language,
+                cycles=args.cycles,
+                dry_run=args.dry_run,
+                summary_mode=args.summary_mode,
+                writer_model=args.writer_model,
+                reviewer_model=args.reviewer_model,
+                writer_prompt_path=Path(args.writer_prompt),
+                reviewer_prompt_path=Path(args.reviewer_prompt),
+            ),
+            on_progress=lambda event: print(event.display_message(), flush=True),
         )
-        project_context = create_project_context(
-            projects_root=args.projects_root,
-            title=project_title,
-            created_date=now.strftime("%Y%m%d"),
-        )
-        snapshot_project_inputs(
-            project_context,
-            source_path=source_path,
-            requirements_path=requirements_path,
-            meeting_notes_path=meeting_notes_path,
-        )
-        ensure_feedback_template(project_context.inputs_dir)
-
-    request = RevisionRequest(
-        source_text=source_text,
-        requirements=requirements,
-        meeting_notes=meeting_notes,
-        cycles=args.cycles,
-        title=source_path.stem if source_path else requirements_path.stem,
-        source_path=str(source_path) if source_path else None,
-        meeting_notes_path=str(meeting_notes_path) if meeting_notes_path else None,
-    )
-
-    if args.dry_run:
-        result = run_revision_loop(
-            request,
-            writer=dry_run_writer,
-            reviewer=dry_run_reviewer,
-        )
-    else:
-        from .autogen_runner import run_autogen_revision_loop
-
-        result = run_autogen_revision_loop(
-            request,
-            writer_settings=writer_settings,
-            reviewer_settings=reviewer_settings,
-            writer_prompt_path=args.writer_prompt,
-            reviewer_prompt_path=args.reviewer_prompt,
-        )
-
-    if project_context and not args.dry_run:
-        final_title = generate_final_suggested_project_title(
-            final_text=result.final_text,
-            requirements=requirements,
-            meeting_notes=meeting_notes,
-            reviewer_settings=reviewer_settings,
-            language=args.project_title_language,
-        )
-        if final_title:
-            project_context = finalize_project_directory(project_context, final_title)
-
-    summary_generation = build_summary_generation(
-        result,
-        mode=args.summary_mode,
-        reviewer_settings=reviewer_settings,
-    )
-
-    run_time = datetime.now().strftime("%H%M%S")
-    output_dirs = default_run_output_dirs(
-        args,
-        run_time,
-        project_dir=project_context.project_dir if project_context else None,
-        version=next_output_version(
-            project_context.dry_run_outputs_dir if args.dry_run else project_context.outputs_dir
-        )
-        if project_context
-        else 1,
-    )
-    written_dirs: list[Path] = []
-    skipped_dirs: list[Path] = []
-    for output_dir in output_dirs:
-        if not prepare_output_dir(output_dir):
-            skipped_dirs.append(output_dir)
-            continue
-        write_outputs(
-            result,
-            output_dir,
-            source_path=source_path,
-            summary_generation=summary_generation,
-            mode="dry-run" if args.dry_run else "real",
-            status="pending",
-            announce_final_review_report=output_dir.name != "latest",
-        )
-        write_session_status(output_dir, current_version="v1")
-        written_dirs.append(output_dir)
-    if project_context and written_dirs:
-        primary_session_dir = next((path for path in written_dirs if path.name != "latest"), written_dirs[0])
-        output_root = project_context.dry_run_outputs_dir if args.dry_run else project_context.outputs_dir
-        write_latest_metadata(output_root, primary_session_dir)
-    print("Wrote revision outputs to " + ", ".join(str(path) for path in written_dirs))
-    if project_context and written_dirs:
-        print_review_command(primary_session_dir)
-    if skipped_dirs:
-        print(
-            "Skipped locked output directories: "
-            + ", ".join(str(path) for path in skipped_dirs)
-            + ". Close any open files there before refreshing latest."
-        )
+    except RevisionApplicationError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(f"Wrote revision outputs to {result.version_path}" + (f", {result.latest_path}" if result.latest_path else ""))
+    print_review_command(result.version_path)
+    for warning in result.warnings:
+        print(f"Warning: {warning}")
     return 0

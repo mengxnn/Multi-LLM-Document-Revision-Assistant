@@ -4,6 +4,47 @@ from office_revision.workflow import RevisionRequest, run_revision_loop
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_progress_hook_accepts_legacy_three_argument_callbacks(self):
+        events = []
+
+        run_revision_loop(
+            RevisionRequest(source_text="source", requirements="requirements", cycles=1),
+            writer=lambda context: "draft",
+            reviewer=lambda context: "review",
+            on_progress=lambda stage, cycle, total: events.append((stage, cycle, total)),
+        )
+
+        self.assertEqual(events[0], ("writer_running", 1, 1))
+
+    def test_emits_writer_and_reviewer_progress_for_each_cycle(self):
+        events = []
+        request = RevisionRequest(source_text="source", requirements="requirements", cycles=2)
+
+        run_revision_loop(
+            request,
+            writer=lambda context: f"draft {context.cycle_index}",
+            reviewer=lambda context: "是否继续修改：是",
+            on_progress=lambda stage, cycle, total, elapsed_seconds=None: events.append(
+                (stage, cycle, total, elapsed_seconds)
+            ),
+        )
+
+        self.assertEqual(
+            [event[:3] for event in events],
+            [
+                ("writer_running", 1, 2),
+                ("writer_completed", 1, 2),
+                ("reviewer_running", 1, 2),
+                ("reviewer_completed", 1, 2),
+                ("writer_running", 2, 2),
+                ("writer_completed", 2, 2),
+                ("reviewer_running", 2, 2),
+                ("reviewer_completed", 2, 2),
+            ],
+        )
+        completed_events = [event for event in events if event[0].endswith("_completed")]
+        self.assertTrue(all(isinstance(event[3], float) for event in completed_events))
+
     def test_runs_requested_writer_reviewer_cycles(self):
         calls = []
 

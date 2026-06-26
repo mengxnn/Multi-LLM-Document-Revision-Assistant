@@ -60,3 +60,64 @@ class ModelConnectionStatus:
     ok: bool
     message: str
     elapsed_seconds: float
+
+
+class RevisionApplicationError(Exception):
+    def __init__(self, message: str, *, stage: str = "validation") -> None:
+        super().__init__(message)
+        self.stage = stage
+
+
+@dataclass(frozen=True)
+class StartProjectRequest:
+    requirements_path: str | Path | None = None
+    requirements_text: str | None = None
+    source_path: str | Path | None = None
+    source_text: str | None = None
+    meeting_notes_path: str | Path | None = None
+    meeting_notes_text: str | None = None
+    project_title: str | None = None
+    project_title_language: str = "auto"
+    cycles: int = 2
+    dry_run: bool = False
+    summary_mode: str = "rule"
+    writer_model: str | None = None
+    reviewer_model: str | None = None
+    writer_prompt_path: str | Path = Path("config/writer_system_prompt.md")
+    reviewer_prompt_path: str | Path = Path("config/reviewer_system_prompt.md")
+
+
+@dataclass(frozen=True)
+class ProgressEvent:
+    stage: str
+    message: str
+    cycle: int | None = None
+    total_cycles: int | None = None
+    elapsed_seconds: float | None = None
+
+    def display_message(self) -> str:
+        details: list[str] = []
+        if self.cycle is not None and self.total_cycles is not None:
+            details.append(f"{self.cycle}/{self.total_cycles}")
+        if self.elapsed_seconds is not None:
+            details.append(f"用时 {self.elapsed_seconds:.1f} 秒")
+        if not details:
+            return self.message
+        return f"{self.message}（{'，'.join(details)}）"
+
+
+@dataclass(frozen=True)
+class RevisionRunResult:
+    project_id: str
+    project_path: Path
+    version: int
+    version_path: Path
+    latest_path: Path | None
+    status: str
+    mode: str
+    requested_cycles: int
+    actual_cycles: int
+    stopped_early: bool
+    stop_reason: str | None
+    artifacts: ArtifactLinks
+    warnings: tuple[str, ...] = ()

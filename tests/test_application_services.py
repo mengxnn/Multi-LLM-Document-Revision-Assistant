@@ -3,13 +3,52 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from office_revision.application import RevisionApplication
+from office_revision.application import (
+    ArtifactLinks,
+    ProgressEvent,
+    RevisionApplication,
+    RevisionApplicationError,
+    RevisionRunResult,
+    StartProjectRequest,
+)
 from office_revision.application.model_connections import ModelConnectionService
 from office_revision.connection_test import ConnectionCheckResult
 from office_revision.project_paths import VersionLayout, write_manifest
 
 
 class ApplicationServiceTests(unittest.TestCase):
+    def test_exports_new_project_contracts(self):
+        request = StartProjectRequest(requirements_text="Write a plan.")
+        event = ProgressEvent(stage="reading_inputs", message="Reading inputs")
+        timed_event = ProgressEvent(
+            stage="writer_completed",
+            message="writer round completed",
+            cycle=1,
+            total_cycles=2,
+            elapsed_seconds=12.34,
+        )
+        result = RevisionRunResult(
+            project_id="Project_20260618",
+            project_path=Path("projects/Project_20260618"),
+            version=1,
+            version_path=Path("projects/Project_20260618/outputs/120000-pending-v1"),
+            latest_path=Path("projects/Project_20260618/outputs/latest"),
+            status="pending",
+            mode="real",
+            requested_cycles=2,
+            actual_cycles=1,
+            stopped_early=True,
+            stop_reason="reviewer_requested_stop",
+            artifacts=ArtifactLinks(),
+        )
+
+        self.assertEqual(request.summary_mode, "rule")
+        self.assertEqual(event.stage, "reading_inputs")
+        self.assertEqual(event.display_message(), "Reading inputs")
+        self.assertEqual(timed_event.display_message(), "writer round completed（1/2，用时 12.3 秒）")
+        self.assertEqual(result.version, 1)
+        self.assertTrue(issubclass(RevisionApplicationError, Exception))
+
     def test_lists_projects_and_returns_structured_version_details(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "projects"
