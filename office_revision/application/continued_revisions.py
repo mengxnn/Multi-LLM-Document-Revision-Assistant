@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Callable
 
 from ..autogen_runner import generate_llm_feedback_analysis, run_autogen_revision_loop
-from ..config import load_env_file, load_role_settings, merged_env_values
 from ..continue_flow import (
     FEEDBACK_TEMPLATE,
     build_continue_requirements,
@@ -32,6 +31,7 @@ from .contracts import (
     RevisionApplicationError,
     RevisionRunResult,
 )
+from .model_profiles import load_active_role_settings
 
 
 ProgressCallback = Callable[[ProgressEvent], None]
@@ -43,11 +43,13 @@ class ContinuedRevisionService:
         projects_root: str | Path = "projects",
         config_path: str | Path = "config/settings.env",
         *,
+        model_profiles_path: str | Path = "config/model_profiles.json",
         real_runner=None,
         feedback_analyzer=None,
     ) -> None:
         self.projects_root = Path(projects_root)
         self.config_path = Path(config_path)
+        self.model_profiles_path = Path(model_profiles_path)
         self.real_runner = real_runner or run_autogen_revision_loop
         self.feedback_analyzer = feedback_analyzer or generate_llm_feedback_analysis
 
@@ -320,9 +322,18 @@ class ContinuedRevisionService:
             raise RevisionApplicationError("summary_mode must be rule or llm")
 
     def _settings(self, request: ContinueRevisionRequest):
-        values = merged_env_values(load_env_file(self.config_path))
-        writer = load_role_settings(values, "WRITER", default_model=request.writer_model or "gpt-4.1")
-        reviewer = load_role_settings(values, "REVIEWER", default_model=request.reviewer_model or "gpt-4.1")
+        writer = load_active_role_settings(
+            config_path=self.config_path,
+            profile_path=self.model_profiles_path,
+            role="WRITER",
+            default_model=request.writer_model or "gpt-4.1",
+        )
+        reviewer = load_active_role_settings(
+            config_path=self.config_path,
+            profile_path=self.model_profiles_path,
+            role="REVIEWER",
+            default_model=request.reviewer_model or "gpt-4.1",
+        )
         if request.writer_model:
             writer = replace(writer, model=request.writer_model)
         if request.reviewer_model:

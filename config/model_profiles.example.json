@@ -1,0 +1,40 @@
+{
+  "profiles": {
+    "writer": {
+      "profile_id": "writer",
+      "name": "Writer Model Name",
+      "provider": "provider name",
+      "api_key": "replace-with-your-writer-api-key",
+      "base_url": "https://example.com/v1",
+      "model": "model name",
+      "enable_search": false,
+      "model_family": "unknown",
+      "vision": false,
+      "function_calling": false,
+      "json_output": false,
+      "structured_output": false,
+      "timeout_seconds": 120,
+      "max_retries": 1
+    },
+    "reviewer": {
+      "profile_id": "reviewer",
+      "name": "Reviewer Model Name",
+      "provider": "provider name",
+      "api_key": "replace-with-your-reviewer-api-key",
+      "base_url": "https://example.com/v1",
+      "model": "model name",
+      "enable_search": false,
+      "model_family": "unknown",
+      "vision": false,
+      "function_calling": false,
+      "json_output": false,
+      "structured_output": false,
+      "timeout_seconds": 120,
+      "max_retries": 1
+    }
+  },
+  "active": {
+    "WRITER": "writer",
+    "REVIEWER": "reviewer"
+  }
+}

@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Callable
 
 from ..autogen_runner import generate_llm_project_title, run_autogen_revision_loop
-from ..config import load_env_file, load_role_settings, merged_env_values
 from ..continue_flow import ensure_feedback_template
 from ..document_io import read_source_text
 from ..dry_run import dry_run_reviewer, dry_run_writer
@@ -29,6 +28,7 @@ from .contracts import (
     RevisionRunResult,
     StartProjectRequest,
 )
+from .model_profiles import load_active_role_settings
 
 
 ProgressCallback = Callable[[ProgressEvent], None]
@@ -40,11 +40,13 @@ class NewProjectService:
         projects_root: str | Path = "projects",
         config_path: str | Path = "config/settings.env",
         *,
+        model_profiles_path: str | Path = "config/model_profiles.json",
         real_runner=None,
         title_generator=None,
     ) -> None:
         self.projects_root = Path(projects_root)
         self.config_path = Path(config_path)
+        self.model_profiles_path = Path(model_profiles_path)
         self.real_runner = real_runner or run_autogen_revision_loop
         self.title_generator = title_generator or generate_llm_project_title
 
@@ -264,9 +266,18 @@ class NewProjectService:
             (inputs_dir / "meeting_notes.md").write_text(meeting_notes, encoding="utf-8")
 
     def _settings(self, request):
-        values = merged_env_values(load_env_file(self.config_path))
-        writer = load_role_settings(values, "WRITER", default_model=request.writer_model or "gpt-4.1")
-        reviewer = load_role_settings(values, "REVIEWER", default_model=request.reviewer_model or "gpt-4.1")
+        writer = load_active_role_settings(
+            config_path=self.config_path,
+            profile_path=self.model_profiles_path,
+            role="WRITER",
+            default_model=request.writer_model or "gpt-4.1",
+        )
+        reviewer = load_active_role_settings(
+            config_path=self.config_path,
+            profile_path=self.model_profiles_path,
+            role="REVIEWER",
+            default_model=request.reviewer_model or "gpt-4.1",
+        )
         if request.writer_model:
             writer = replace(writer, model=request.writer_model)
         if request.reviewer_model:

@@ -71,6 +71,49 @@ class ModelConnectionStatus:
     elapsed_seconds: float
 
 
+@dataclass(frozen=True)
+class ModelProfile:
+    profile_id: str
+    name: str
+    provider: str
+    api_key: str
+    base_url: str
+    model: str
+    enable_search: bool = False
+    model_family: str = "unknown"
+    vision: bool = False
+    function_calling: bool = False
+    json_output: bool = False
+    structured_output: bool = False
+    timeout_seconds: int = 60
+    max_retries: int = 1
+
+
+@dataclass(frozen=True)
+class ModelProfileRequest:
+    profile_id: str
+    name: str
+    model: str
+    provider: str = "openai-compatible"
+    api_key: str = ""
+    base_url: str = ""
+    enable_search: bool = False
+    model_family: str = "unknown"
+    vision: bool = False
+    function_calling: bool = False
+    json_output: bool = False
+    structured_output: bool = False
+    timeout_seconds: int = 60
+    max_retries: int = 1
+
+
+@dataclass(frozen=True)
+class ActiveModelProfile:
+    role: str
+    profile_id: str
+    profile: ModelProfile
+
+
 class RevisionApplicationError(Exception):
     def __init__(self, message: str, *, stage: str = "validation") -> None:
         super().__init__(message)
