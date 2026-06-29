@@ -114,7 +114,8 @@ h2 {
 
 .item-meta,
 .detail,
-.status {
+.status,
+.artifact-list {
   color: var(--muted);
   font-size: 14px;
 }
@@ -122,6 +123,41 @@ h2 {
 .detail {
   margin-top: 12px;
   line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.project-detail,
+.project-actions {
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.project-actions h3,
+.version-title {
+  margin: 14px 0 8px;
+}
+
+.empty-state {
+  color: var(--muted);
+}
+
+.version-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 10px;
+  padding: 12px;
+}
+
+.artifact-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.artifact-list code {
+  color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
 label {

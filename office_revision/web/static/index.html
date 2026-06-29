@@ -29,7 +29,32 @@
             <button id="refresh-projects" type="button">刷新项目</button>
           </div>
           <div id="projects" class="list"></div>
-          <div id="project-detail" class="detail"></div>
+          <section id="project-detail" class="detail project-detail">
+            <div class="empty-state">请选择一个项目查看详情。</div>
+          </section>
+          <section id="project-actions" class="project-actions" hidden>
+            <h3>继续修改</h3>
+            <label for="continue-feedback-text">反馈意见</label>
+            <textarea id="continue-feedback-text" rows="4" placeholder="输入本轮继续修改的反馈"></textarea>
+            <div class="form-row">
+              <label for="continue-cycles">轮数</label>
+              <input id="continue-cycles" type="number" min="1" value="2">
+              <label class="check"><input id="continue-dry-run" type="checkbox"> dry-run</label>
+            </div>
+            <button id="continue-project" type="button">继续修改</button>
+
+            <h3>版本决策</h3>
+            <div class="actions">
+              <button id="decision-accept" type="button">接受</button>
+              <button id="decision-continue" type="button" class="secondary">标记继续</button>
+              <button id="decision-skip" type="button" class="secondary">跳过</button>
+              <button id="decision-abandon" type="button" class="danger">放弃</button>
+            </div>
+
+            <h3>删除项目</h3>
+            <label class="check"><input id="delete-permanent" type="checkbox"> 永久删除</label>
+            <button id="delete-project" type="button" class="danger">删除项目</button>
+          </section>
         </section>
 
         <section id="view-new-project" class="view">

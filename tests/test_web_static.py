@@ -31,6 +31,10 @@ class WebStaticTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("loadProjects", response.text)
+        self.assertIn("continueProject", response.text)
+        self.assertIn("deleteProject", response.text)
+        self.assertIn('"skip"', response.text)
+        self.assertIn("permanent", response.text)
 
     def test_static_css_is_served(self):
         client = TestClient(create_app())
@@ -39,6 +43,17 @@ class WebStaticTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(".layout", response.text)
+        self.assertIn(".artifact-list", response.text)
+
+    def test_project_detail_controls_are_present(self):
+        client = TestClient(create_app())
+
+        response = client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("continue-feedback-text", response.text)
+        self.assertIn("continue-project", response.text)
+        self.assertIn("delete-permanent", response.text)
 
     def test_run_gui_module_imports(self):
         import run_gui
