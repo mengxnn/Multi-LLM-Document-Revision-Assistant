@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>多 Agent 办公文档修订助手</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>多 Agent 办公文档修订助手</h1>
+        <p>本地运行，项目与模型配置保存在当前工作目录。</p>
+      </div>
+      <button id="refresh-all" type="button">刷新</button>
+    </header>
+
+    <main class="layout">
+      <section class="workspace">
+        <nav class="tabs" aria-label="主要视图">
+          <button class="tab is-active" type="button" data-view="projects">项目</button>
+          <button class="tab" type="button" data-view="new-project">新建</button>
+          <button class="tab" type="button" data-view="profiles">模型</button>
+        </nav>
+
+        <section id="view-projects" class="view is-active">
+          <div class="section-head">
+            <h2>项目</h2>
+            <button id="refresh-projects" type="button">刷新项目</button>
+          </div>
+          <div id="projects" class="list"></div>
+          <div id="project-detail" class="detail"></div>
+        </section>
+
+        <section id="view-new-project" class="view">
+          <h2>新建项目</h2>
+          <label for="requirements-text">修改要求</label>
+          <textarea id="requirements-text" rows="7" placeholder="请输入修改要求，必填"></textarea>
+
+          <label for="source-text">初稿，可选</label>
+          <textarea id="source-text" rows="5" placeholder="留空则按要求直接起草"></textarea>
+
+          <label for="meeting-notes-text">会议纪要，可选</label>
+          <textarea id="meeting-notes-text" rows="4"></textarea>
+
+          <div class="form-row">
+            <label for="cycles">轮数</label>
+            <input id="cycles" type="number" min="1" value="2">
+            <label class="check"><input id="dry-run" type="checkbox"> dry-run</label>
+          </div>
+
+          <button id="start-project" type="button" disabled>开始修订</button>
+        </section>
+
+        <section id="view-profiles" class="view">
+          <div class="section-head">
+            <h2>模型配置</h2>
+            <button id="refresh-profiles" type="button">刷新配置</button>
+          </div>
+          <div id="profiles" class="list"></div>
+          <form id="profile-form" class="profile-form">
+            <input id="profile-id" placeholder="profile_id">
+            <input id="profile-name" placeholder="名称">
+            <input id="profile-model" placeholder="模型">
+            <input id="profile-provider" placeholder="provider" value="openai-compatible">
+            <input id="profile-base-url" placeholder="base_url">
+            <input id="profile-api-key" placeholder="api_key" type="password">
+            <button type="submit">保存配置</button>
+          </form>
+          <button id="check-connections" type="button">检查连接</button>
+          <div id="connection-status" class="detail"></div>
+        </section>
+      </section>
+
+      <aside class="run-panel">
+        <h2>运行进度</h2>
+        <div id="run-status" class="status">暂无运行</div>
+        <ol id="run-events"></ol>
+      </aside>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

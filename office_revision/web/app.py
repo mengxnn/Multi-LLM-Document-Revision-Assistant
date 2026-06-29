@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from office_revision.application import RevisionApplication
 from office_revision.application.contracts import (
@@ -35,21 +37,12 @@ def create_app(
     runs = run_store or InMemoryRunStore()
     executor = ThreadPoolExecutor(max_workers=2)
     app = FastAPI(title="多 Agent 办公文档修订助手")
+    static_dir = Path(__file__).parent / "static"
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-    @app.get("/", response_class=HTMLResponse)
-    def index() -> str:
-        return """
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <title>多 Agent 办公文档修订助手</title>
-  </head>
-  <body>
-    <h1>多 Agent 办公文档修订助手</h1>
-  </body>
-</html>
-"""
+    @app.get("/")
+    def index() -> FileResponse:
+        return FileResponse(static_dir / "index.html")
 
     @app.get("/api/projects")
     def list_projects() -> dict[str, object]:
