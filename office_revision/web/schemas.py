@@ -4,7 +4,11 @@ from pathlib import Path
 from typing import Any
 
 from office_revision.application.contracts import (
+    ActiveModelProfile,
     ArtifactLinks,
+    DecisionOutcome,
+    DeleteProjectResult,
+    ModelConnectionStatus,
     ModelProfile,
     ProgressEvent,
     ProjectDetail,
@@ -12,6 +16,7 @@ from office_revision.application.contracts import (
     RevisionRunResult,
     VersionSummary,
 )
+from office_revision.web.runs import RunRecord
 
 
 def path_to_string(path: Path | None) -> str | None:
@@ -112,4 +117,56 @@ def model_profile_to_dict(profile: ModelProfile) -> dict[str, Any]:
         "structured_output": profile.structured_output,
         "timeout_seconds": profile.timeout_seconds,
         "max_retries": profile.max_retries,
+    }
+
+
+def decision_outcome_to_dict(outcome: DecisionOutcome) -> dict[str, Any]:
+    return {
+        "status": outcome.status,
+        "version_path": path_to_string(outcome.version_path),
+        "renamed": outcome.renamed,
+        "message": outcome.message,
+    }
+
+
+def delete_project_result_to_dict(result: DeleteProjectResult) -> dict[str, Any]:
+    return {
+        "project_id": result.project_id,
+        "deleted_path": path_to_string(result.deleted_path),
+        "trash_path": path_to_string(result.trash_path),
+        "permanent": result.permanent,
+        "message": result.message,
+    }
+
+
+def model_connection_status_to_dict(status: ModelConnectionStatus) -> dict[str, Any]:
+    return {
+        "role": status.role,
+        "model": status.model,
+        "ok": status.ok,
+        "message": status.message,
+        "elapsed_seconds": status.elapsed_seconds,
+    }
+
+
+def active_model_profile_to_dict(active: ActiveModelProfile) -> dict[str, Any]:
+    return {
+        "role": active.role,
+        "profile_id": active.profile_id,
+        "profile": model_profile_to_dict(active.profile),
+    }
+
+
+def run_record_to_dict(record: RunRecord) -> dict[str, Any]:
+    return {
+        "run_id": record.run_id,
+        "kind": record.kind,
+        "status": record.status,
+        "created_at": record.created_at,
+        "started_at": record.started_at,
+        "finished_at": record.finished_at,
+        "events": [progress_event_to_dict(event) for event in record.events],
+        "result": revision_result_to_dict(record.result) if record.result else None,
+        "error": record.error,
+        "project_id": record.project_id,
     }
