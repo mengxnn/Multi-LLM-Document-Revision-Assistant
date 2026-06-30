@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -32,10 +35,14 @@ def create_app(
     application: Any | None = None,
     run_store: InMemoryRunStore | None = None,
     run_synchronously: bool = False,
+    opener: Callable[[Path, str], None] | None = None,
+    projects_root: Path | str = Path("projects"),
 ) -> FastAPI:
     revision_app = application or RevisionApplication()
     runs = run_store or InMemoryRunStore()
     executor = ThreadPoolExecutor(max_workers=2)
+    artifact_opener = opener or _open_local_path
+    safe_projects_root = Path(projects_root).resolve()
     app = FastAPI(title="多 Agent 办公文档修订助手")
     static_dir = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
@@ -201,6 +208,24 @@ def create_app(
             ]
         }
 
+    @app.post("/api/artifacts/open")
+    def open_artifact(payload: dict[str, object]) -> dict[str, object]:
+        path_text = _optional_string(payload.get("path"))
+        mode = str(payload.get("mode") or "open")
+        if not path_text:
+            raise HTTPException(status_code=400, detail="path is required")
+        if mode not in {"open", "reveal"}:
+            raise HTTPException(status_code=400, detail="unsupported open mode")
+
+        path = _resolve_project_path(path_text, projects_root=safe_projects_root)
+        if not _is_relative_to(path, safe_projects_root):
+            raise HTTPException(status_code=403, detail="path is outside projects")
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="path not found")
+
+        artifact_opener(path, mode)
+        return {"status": "opened", "path": path.as_posix(), "mode": mode}
+
     @app.get("/api/runs/{run_id}")
     def get_run(run_id: str) -> dict[str, object]:
         try:
@@ -241,3 +266,37 @@ def _run_worker(
         worker()
     else:
         executor.submit(worker)
+
+
+def _resolve_project_path(path_text: str, *, projects_root: Path) -> Path:
+    candidate = Path(path_text)
+    if candidate.is_absolute():
+        return candidate.resolve()
+    if candidate.parts and candidate.parts[0] == projects_root.name:
+        return (Path.cwd() / candidate).resolve()
+    return (projects_root / candidate).resolve()
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _open_local_path(path: Path, mode: str) -> None:
+    if mode == "reveal":
+        if sys.platform.startswith("win") and path.is_file():
+            subprocess.Popen(["explorer", f"/select,{path}"])
+            return
+        target = path if path.is_dir() else path.parent
+    else:
+        target = path
+
+    if hasattr(os, "startfile"):
+        os.startfile(target)  # type: ignore[attr-defined]
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(target)])
+    else:
+        subprocess.Popen(["xdg-open", str(target)])

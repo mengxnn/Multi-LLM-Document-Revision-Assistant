@@ -1,4 +1,5 @@
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import TestCase
 import warnings
 
@@ -399,3 +400,72 @@ class WebApiEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["connections"][0]["ok"])
+
+    def test_open_artifact_endpoint_uses_injected_opener_for_project_path(self):
+        opened = []
+        with TemporaryDirectory() as temp_dir:
+            projects_root = Path(temp_dir) / "projects"
+            artifact = projects_root / "demo" / "latest" / "final_draft" / "final.md"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_text("draft", encoding="utf-8")
+            client = TestClient(
+                create_app(
+                    application=FakeWebApplication(),
+                    opener=lambda path, mode: opened.append((path, mode)),
+                    projects_root=projects_root,
+                )
+            )
+
+            response = client.post(
+                "/api/artifacts/open",
+                json={"path": artifact.as_posix(), "mode": "open"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "opened")
+        self.assertEqual(opened, [(artifact.resolve(), "open")])
+
+    def test_open_artifact_endpoint_rejects_paths_outside_projects_root(self):
+        opened = []
+        with TemporaryDirectory() as temp_dir:
+            projects_root = Path(temp_dir) / "projects"
+            projects_root.mkdir()
+            outside = Path(temp_dir) / "outside.md"
+            outside.write_text("outside", encoding="utf-8")
+            client = TestClient(
+                create_app(
+                    application=FakeWebApplication(),
+                    opener=lambda path, mode: opened.append((path, mode)),
+                    projects_root=projects_root,
+                )
+            )
+
+            response = client.post(
+                "/api/artifacts/open",
+                json={"path": outside.as_posix(), "mode": "open"},
+            )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(opened, [])
+
+    def test_open_artifact_endpoint_supports_reveal_mode(self):
+        opened = []
+        with TemporaryDirectory() as temp_dir:
+            projects_root = Path(temp_dir) / "projects"
+            version_dir = projects_root / "demo" / "outputs" / "100000-pending-v1"
+            version_dir.mkdir(parents=True)
+            client = TestClient(
+                create_app(
+                    application=FakeWebApplication(),
+                    opener=lambda path, mode: opened.append((path, mode)),
+                    projects_root=projects_root,
+                )
+            )
+
+            response = client.post(
+                "/api/artifacts/open",
+                json={"path": version_dir.as_posix(), "mode": "reveal"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(opened, [(version_dir.resolve(), "reveal")])

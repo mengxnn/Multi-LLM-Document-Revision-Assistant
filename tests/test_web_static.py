@@ -35,6 +35,13 @@ class WebStaticTests(TestCase):
         self.assertIn("deleteProject", response.text)
         self.assertIn('"skip"', response.text)
         self.assertIn("permanent", response.text)
+        self.assertIn("shortPath", response.text)
+        self.assertIn("artifactDisplayPath", response.text)
+        self.assertIn("inputDisplayPath", response.text)
+        self.assertIn("openArtifact", response.text)
+        self.assertIn("/api/artifacts/open", response.text)
+        self.assertIn("打开文件", response.text)
+        self.assertIn("文件位置", response.text)
 
     def test_static_css_is_served(self):
         client = TestClient(create_app())
@@ -44,6 +51,7 @@ class WebStaticTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(".layout", response.text)
         self.assertIn(".artifact-list", response.text)
+        self.assertIn(".path-row", response.text)
 
     def test_project_detail_controls_are_present(self):
         client = TestClient(create_app())

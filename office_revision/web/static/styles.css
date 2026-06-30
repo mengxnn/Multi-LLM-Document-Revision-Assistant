@@ -160,6 +160,22 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.path-row,
+.path-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.path-row code {
+  min-width: 180px;
+}
+
+button.compact {
+  padding: 4px 8px;
+}
+
 label {
   display: block;
   margin: 12px 0 6px;

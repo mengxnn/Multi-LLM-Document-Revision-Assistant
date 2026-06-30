@@ -31,6 +31,47 @@ async function requestJson(url, options = {}) {
   return payload;
 }
 
+function shortPath(path) {
+  if (!path) {
+    return "";
+  }
+  const normalized = String(path).replaceAll("\\", "/");
+  const marker = "/projects/";
+  const markerIndex = normalized.toLowerCase().indexOf(marker);
+  if (markerIndex >= 0) {
+    return normalized.slice(markerIndex + 1);
+  }
+  if (normalized.toLowerCase().startsWith("projects/")) {
+    return normalized;
+  }
+  return normalized;
+}
+
+function artifactDisplayPath(path) {
+  const display = shortPath(path);
+  const outputMatch = display.match(/\/(?:outputs|dry_run_outputs)\/[^/]+\/(.+)$/);
+  if (outputMatch) {
+    return outputMatch[1];
+  }
+  const latestMatch = display.match(/\/latest\/(.+)$/);
+  if (latestMatch) {
+    return latestMatch[1];
+  }
+  return display;
+}
+
+function inputDisplayPath(path) {
+  const display = shortPath(path);
+  const inputMatch = display.match(/\/inputs\/(.+)$/);
+  if (inputMatch) {
+    return `inputs/${inputMatch[1]}`;
+  }
+  if (display.toLowerCase().startsWith("inputs/")) {
+    return display;
+  }
+  return display;
+}
+
 function showView(name) {
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.toggle("is-active", tab.dataset.view === name);
@@ -103,9 +144,15 @@ function renderProjectDetail(detail) {
     createTextElement(
       "div",
       "item-meta",
-      `${summary.project_id} | 最新 v${summary.latest_version || "-"} | ${summary.latest_status || "无状态"} | ${summary.path}`
+      `${summary.project_id} | 最新 v${summary.latest_version || "-"} | ${summary.latest_status || "无状态"} | ${shortPath(summary.path)}`
     )
   );
+  if (summary.path) {
+    const actions = document.createElement("div");
+    actions.className = "actions path-actions";
+    actions.appendChild(createOpenButton(summary.path, "reveal", "打开项目位置"));
+    projectDetailEl.appendChild(actions);
+  }
 
   for (const version of detail.versions) {
     const card = document.createElement("article");
@@ -118,7 +165,14 @@ function renderProjectDetail(detail) {
         `${version.name} | v${version.version || "-"} | ${version.status} | ${version.mode}${latestMark}`
       )
     );
-    card.appendChild(createTextElement("div", "item-meta", version.path));
+    const versionMeta = createTextElement("div", "item-meta", shortPath(version.path));
+    card.appendChild(versionMeta);
+    if (version.path) {
+      const actions = document.createElement("div");
+      actions.className = "actions path-actions";
+      actions.appendChild(createOpenButton(version.path, "reveal", "打开版本目录"));
+      card.appendChild(actions);
+    }
     card.appendChild(renderArtifacts(version.artifacts));
     projectDetailEl.appendChild(card);
   }
@@ -129,7 +183,7 @@ function renderProjectDetail(detail) {
     inputs.className = "artifact-list";
     inputs.appendChild(createTextElement("strong", null, "输入文件"));
     for (const name of inputNames) {
-      inputs.appendChild(createPathLine(name, detail.inputs[name]));
+      inputs.appendChild(createPathLine(name, detail.inputs[name], inputDisplayPath));
     }
     projectDetailEl.appendChild(inputs);
   }
@@ -150,7 +204,7 @@ function renderArtifacts(artifacts) {
   ];
   for (const [label, path] of entries) {
     if (path) {
-      list.appendChild(createPathLine(label, path));
+      list.appendChild(createPathLine(label, path, artifactDisplayPath));
     }
   }
   if (list.childElementCount === 1) {
@@ -159,11 +213,37 @@ function renderArtifacts(artifacts) {
   return list;
 }
 
-function createPathLine(label, path) {
+function createPathLine(label, path, displayFormatter = shortPath) {
   const row = document.createElement("div");
+  row.className = "path-row";
   row.appendChild(createTextElement("span", null, `${label}: `));
-  row.appendChild(createTextElement("code", null, path));
+  const code = createTextElement("code", null, displayFormatter(path));
+  code.title = path;
+  row.appendChild(code);
+  row.appendChild(createOpenButton(path, "open", "打开文件"));
+  row.appendChild(createOpenButton(path, "reveal", "文件位置"));
   return row;
+}
+
+function createOpenButton(path, mode, label) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary compact";
+  button.textContent = label;
+  button.addEventListener("click", () => openArtifact(path, mode));
+  return button;
+}
+
+async function openArtifact(path, mode) {
+  try {
+    await requestJson("/api/artifacts/open", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({path, mode})
+    });
+  } catch (error) {
+    projectDetailEl.appendChild(createTextElement("div", "status", error.message));
+  }
 }
 
 async function applyDecision(projectId, decision) {
