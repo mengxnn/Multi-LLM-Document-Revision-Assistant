@@ -133,6 +133,7 @@ class NewProjectService:
                     on_progress=workflow_progress,
                 )
         except Exception as exc:
+            self._cleanup_failed_project(context)
             raise RevisionApplicationError(str(exc), stage="running_revision") from exc
 
         warnings: list[str] = []
@@ -265,6 +266,14 @@ class NewProjectService:
         if meeting_notes:
             (inputs_dir / "meeting_notes.md").write_text(meeting_notes, encoding="utf-8")
 
+    @staticmethod
+    def _cleanup_failed_project(context) -> None:
+        if not context.project_dir.exists():
+            return
+        if _has_version_outputs(context.outputs_dir) or _has_version_outputs(context.dry_run_outputs_dir):
+            return
+        shutil.rmtree(context.project_dir, ignore_errors=True)
+
     def _settings(self, request):
         writer = load_active_role_settings(
             config_path=self.config_path,
@@ -283,3 +292,9 @@ class NewProjectService:
         if request.reviewer_model:
             reviewer = replace(reviewer, model=request.reviewer_model)
         return writer, reviewer
+
+
+def _has_version_outputs(output_root: Path) -> bool:
+    if not output_root.exists():
+        return False
+    return any(path.is_dir() and path.name != "latest" for path in output_root.iterdir())

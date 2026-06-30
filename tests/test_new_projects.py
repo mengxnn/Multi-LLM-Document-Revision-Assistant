@@ -8,6 +8,7 @@ from office_revision.application import (
     RevisionApplicationError,
     StartProjectRequest,
 )
+from office_revision.application.new_projects import NewProjectService
 
 
 class NewProjectTests(unittest.TestCase):
@@ -91,6 +92,34 @@ class NewProjectTests(unittest.TestCase):
                 app.start_new_project(StartProjectRequest(requirements_text="  ", dry_run=True))
 
             self.assertFalse(root.exists())
+
+    def test_failed_real_run_removes_new_project_without_outputs(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "projects"
+
+            def failing_runner(*args, **kwargs):
+                raise RuntimeError("model timed out")
+
+            app = RevisionApplication(
+                projects_root=root,
+                new_project_service=NewProjectService(
+                    root,
+                    real_runner=failing_runner,
+                    title_generator=lambda **kwargs: "Should Not Run",
+                ),
+            )
+
+            with self.assertRaises(RevisionApplicationError):
+                app.start_new_project(
+                    StartProjectRequest(
+                        requirements_text="Write a plan.",
+                        cycles=1,
+                        dry_run=False,
+                    )
+                )
+
+            self.assertTrue(root.exists())
+            self.assertEqual([path.name for path in root.iterdir()], [])
 
     def test_starts_without_source_for_requested_cycles(self):
         with tempfile.TemporaryDirectory() as temp_dir:

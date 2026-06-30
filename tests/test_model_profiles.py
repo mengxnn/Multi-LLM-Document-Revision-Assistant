@@ -161,6 +161,8 @@ class ModelProfileTests(unittest.TestCase):
                         name="Writer Profile",
                         api_key="profile-key",
                         model="profile-writer-model",
+                        timeout_seconds=180,
+                        max_retries=3,
                     )
                 )
                 profile_service.activate_model_profile("writer", "writer-profile")
@@ -204,6 +206,8 @@ class ModelProfileTests(unittest.TestCase):
                         name="Writer Profile",
                         api_key="profile-key",
                         model="profile-writer-model",
+                        timeout_seconds=180,
+                        max_retries=3,
                     )
                 )
                 profile_service.activate_model_profile("writer", "writer-profile")
@@ -244,6 +248,8 @@ class ModelProfileTests(unittest.TestCase):
 
                 self.assertEqual(seen["writer"].model, "profile-writer-model")
                 self.assertEqual(seen["writer"].api_key, "profile-key")
+                self.assertEqual(seen["writer"].timeout_seconds, 180)
+                self.assertEqual(seen["writer"].max_retries, 3)
                 self.assertEqual(seen["reviewer"].model, "env-reviewer-model")
 
 

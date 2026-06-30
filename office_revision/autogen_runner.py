@@ -76,20 +76,31 @@ def _message_content(task_result: Any) -> str:
     return content if isinstance(content, str) else str(content)
 
 
-async def _run_role_task(role: str, cycle_index: int, model: str, call, *, stages: list[str] | None = None) -> str:
+async def _run_role_task(
+    role: str,
+    cycle_index: int,
+    settings_or_model,
+    call,
+    *,
+    stages: list[str] | None = None,
+) -> str:
     start = time.perf_counter()
+    model, config_hint = _role_task_config_hint(settings_or_model)
 
     for stage in stages or []:
         print(f"[{role}] 第 {cycle_index} 轮：{stage}。", flush=True)
-    print(f"[{role}] 第 {cycle_index} 轮开始，请求模型 {model}...", flush=True)
+    suffix = f"（{config_hint}）" if config_hint else ""
+    print(f"[{role}] 第 {cycle_index} 轮开始，请求模型 {model}{suffix}...", flush=True)
     try:
         result = await call()
-    except Exception:
+    except Exception as exc:
         elapsed = time.perf_counter() - start
         print(f"[{role}] 第 {cycle_index} 轮失败，用时 {elapsed:.1f} 秒。", flush=True)
+        print(f"[{role}] 异常类型：{type(exc).__name__}；原因：{exc}", flush=True)
         print(
             f"[{role}] 如果是请求超时，可在 config/settings.env 调整 "
-            f"{role.upper()}_TIMEOUT_SECONDS，或减少 --cycles 后重试。",
+            f"{role.upper()}_TIMEOUT_SECONDS，或在 config/model_profiles.json "
+            "调整当前激活配置的 timeout_seconds；也可以减少 --cycles 后重试。",
             flush=True,
         )
         print("----------------------------------------------------", flush=True)
@@ -98,6 +109,17 @@ async def _run_role_task(role: str, cycle_index: int, model: str, call, *, stage
     print(f"[{role}] 第 {cycle_index} 轮完成，用时 {elapsed:.1f} 秒。", flush=True)
     print("----------------------------------------------------", flush=True)
     return result
+
+
+def _role_task_config_hint(settings_or_model) -> tuple[str, str]:
+    if isinstance(settings_or_model, ModelSettings):
+        base_url = settings_or_model.base_url or "default_base_url"
+        return (
+            settings_or_model.model,
+            f"base_url={base_url}, timeout={settings_or_model.timeout_seconds}s, "
+            f"max_retries={settings_or_model.max_retries}",
+        )
+    return str(settings_or_model), ""
 
 
 def _optional_section(title: str, value: str, missing_text: str) -> str:
@@ -224,7 +246,7 @@ async def _run_autogen_revision_loop_async(
             else ["正在阅读上一版草稿、上一轮审查意见和修改要求"]
         )
         stages.append("正在生成新一版完整文档")
-        return await _run_role_task("writer", context.cycle_index, writer_settings.model, call, stages=stages)
+        return await _run_role_task("writer", context.cycle_index, writer_settings, call, stages=stages)
 
     async def review(context: ReviewContext) -> str:
         async def call():
@@ -232,7 +254,7 @@ async def _run_autogen_revision_loop_async(
             return _message_content(result)
 
         stages = ["正在阅读本轮修改稿、上一轮审查意见和修改要求", "正在生成审查意见"]
-        return await _run_role_task("reviewer", context.cycle_index, reviewer_settings.model, call, stages=stages)
+        return await _run_role_task("reviewer", context.cycle_index, reviewer_settings, call, stages=stages)
 
     try:
         return await _run_async_revision_loop(
