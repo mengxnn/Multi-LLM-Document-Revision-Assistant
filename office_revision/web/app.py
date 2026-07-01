@@ -108,6 +108,7 @@ def create_app(
     def continue_project(project_id: str, payload: dict[str, object]) -> dict[str, str]:
         request = ContinueRevisionRequest(
             project_id=project_id,
+            base_version_path=_optional_string(payload.get("base_version_path")),
             feedback_text=_optional_string(payload.get("feedback_text")),
             feedback_path=_optional_string(payload.get("feedback_path")),
             cycles=_int_value(payload.get("cycles"), default=2),

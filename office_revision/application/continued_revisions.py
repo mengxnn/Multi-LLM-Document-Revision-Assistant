@@ -238,13 +238,22 @@ class ContinuedRevisionService:
         )
 
     def _resolve_target(self, request: ContinueRevisionRequest):
-        target_path = Path(request.project_id)
+        target_path = Path(request.base_version_path or request.project_id)
         if not target_path.exists():
             target_path = self.projects_root / target_path
         try:
-            return resolve_continue_target(target_path, dry_run=request.dry_run)
+            target = resolve_continue_target(target_path, dry_run=request.dry_run)
         except SystemExit as exc:
             raise RevisionApplicationError(str(exc), stage="loading_project") from exc
+        requested_project = Path(request.project_id)
+        if not requested_project.exists():
+            requested_project = self.projects_root / requested_project
+        if requested_project.resolve() != target.project_dir.resolve():
+            raise RevisionApplicationError(
+                "base version does not belong to the requested project",
+                stage="loading_project",
+            )
+        return target
 
     @staticmethod
     def _read_previous_text(path: Path) -> str:

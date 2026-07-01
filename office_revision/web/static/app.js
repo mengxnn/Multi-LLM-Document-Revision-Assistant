@@ -8,6 +8,7 @@ const runStatusEl = document.querySelector("#run-status");
 const runEventsEl = document.querySelector("#run-events");
 const connectionStatusEl = document.querySelector("#connection-status");
 let selectedProjectId = null;
+let selectedBaseVersionPath = null;
 
 function setText(element, text) {
   element.textContent = text;
@@ -112,6 +113,7 @@ async function loadProjects() {
   projectDetailEl.innerHTML = '<div class="empty-state">请选择一个项目查看详情。</div>';
   projectActionsEl.hidden = true;
   selectedProjectId = null;
+  selectedBaseVersionPath = null;
   try {
     const payload = await requestJson("/api/projects");
     for (const project of payload.projects) {
@@ -129,6 +131,7 @@ async function loadProjectDetail(projectId) {
   try {
     const detail = await requestJson(`/api/projects/${projectId}`);
     selectedProjectId = projectId;
+    selectedBaseVersionPath = null;
     projectActionsEl.hidden = false;
     renderProjectDetail(detail);
   } catch (error) {
@@ -170,6 +173,7 @@ function renderProjectDetail(detail) {
     if (version.path) {
       const actions = document.createElement("div");
       actions.className = "actions path-actions";
+      actions.appendChild(createBaseVersionButton(version));
       actions.appendChild(createOpenButton(version.path, "reveal", "打开版本目录"));
       card.appendChild(actions);
     }
@@ -234,6 +238,20 @@ function createOpenButton(path, mode, label) {
   return button;
 }
 
+function createBaseVersionButton(version) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary compact";
+  button.textContent = "基于此版继续";
+  button.addEventListener("click", () => chooseBaseVersion(version));
+  return button;
+}
+
+function chooseBaseVersion(version) {
+  selectedBaseVersionPath = version.path;
+  setText(runStatusEl, `继续基准：${version.name}`);
+}
+
 async function openArtifact(path, mode) {
   try {
     await requestJson("/api/artifacts/open", {
@@ -271,6 +289,7 @@ async function continueProject() {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
         feedback_text: document.querySelector("#continue-feedback-text").value,
+        base_version_path: selectedBaseVersionPath,
         cycles: Number(document.querySelector("#continue-cycles").value || 2),
         dry_run: document.querySelector("#continue-dry-run").checked
       })

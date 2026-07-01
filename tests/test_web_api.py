@@ -346,6 +346,30 @@ class WebApiEndpointTests(TestCase):
         self.assertIsInstance(fake_app.received_continue_request, ContinueRevisionRequest)
         self.assertEqual(fake_app.received_continue_request.project_id, "demo_20260627")
 
+    def test_continue_project_endpoint_accepts_base_version_path(self):
+        fake_app = FakeWebApplication()
+        client = TestClient(
+            create_app(
+                application=fake_app,
+                run_store=InMemoryRunStore(),
+                run_synchronously=True,
+            )
+        )
+        base_path = "projects/demo_20260627/outputs/100000-pending-v1"
+
+        response = client.post(
+            "/api/projects/demo_20260627/continue",
+            json={
+                "feedback_text": "Use this historical version.",
+                "base_version_path": base_path,
+                "cycles": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(fake_app.received_continue_request.project_id, "demo_20260627")
+        self.assertEqual(fake_app.received_continue_request.base_version_path, base_path)
+
     def test_decision_endpoint(self):
         fake_app = FakeWebApplication()
         client = TestClient(create_app(application=fake_app))

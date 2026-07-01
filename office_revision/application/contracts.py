@@ -142,6 +142,7 @@ class StartProjectRequest:
 @dataclass(frozen=True)
 class ContinueRevisionRequest:
     project_id: str | Path
+    base_version_path: str | Path | None = None
     feedback_path: str | Path | None = None
     feedback_text: str | None = None
     cycles: int = 2
