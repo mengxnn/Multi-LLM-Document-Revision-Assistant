@@ -42,6 +42,8 @@ class WebStaticTests(TestCase):
         self.assertIn("selectedBaseVersionPath", response.text)
         self.assertIn("chooseBaseVersion", response.text)
         self.assertIn("base_version_path", response.text)
+        self.assertIn("checkModelProfile", response.text)
+        self.assertIn("/check", response.text)
         self.assertIn("/api/artifacts/open", response.text)
         self.assertIn("打开文件", response.text)
         self.assertIn("文件位置", response.text)
@@ -65,6 +67,21 @@ class WebStaticTests(TestCase):
         self.assertIn("continue-feedback-text", response.text)
         self.assertIn("continue-project", response.text)
         self.assertIn("delete-permanent", response.text)
+
+    def test_model_profile_form_exposes_advanced_fields(self):
+        client = TestClient(create_app())
+
+        response = client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("profile-timeout-seconds", response.text)
+        self.assertIn("profile-max-retries", response.text)
+        self.assertIn("profile-model-family", response.text)
+        self.assertIn("profile-enable-search", response.text)
+        self.assertIn("profile-vision", response.text)
+        self.assertIn("profile-function-calling", response.text)
+        self.assertIn("profile-json-output", response.text)
+        self.assertIn("profile-structured-output", response.text)
 
     def test_run_gui_module_imports(self):
         import run_gui

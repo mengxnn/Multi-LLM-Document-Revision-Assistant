@@ -209,6 +209,14 @@ def create_app(
             ]
         }
 
+    @app.post("/api/model-profiles/{profile_id}/check")
+    def check_model_profile(profile_id: str) -> dict[str, object]:
+        status = revision_app.check_model_profile_connection(profile_id)
+        return {
+            "profile_id": profile_id,
+            "connection": model_connection_status_to_dict(status),
+        }
+
     @app.post("/api/artifacts/open")
     def open_artifact(payload: dict[str, object]) -> dict[str, object]:
         path_text = _optional_string(payload.get("path"))

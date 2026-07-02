@@ -90,6 +90,14 @@
             <input id="profile-provider" placeholder="provider" value="openai-compatible">
             <input id="profile-base-url" placeholder="base_url">
             <input id="profile-api-key" placeholder="api_key" type="password">
+            <input id="profile-model-family" placeholder="model_family" value="unknown">
+            <input id="profile-timeout-seconds" type="number" min="1" value="60" placeholder="timeout_seconds">
+            <input id="profile-max-retries" type="number" min="0" value="1" placeholder="max_retries">
+            <label class="check"><input id="profile-enable-search" type="checkbox"> enable_search</label>
+            <label class="check"><input id="profile-vision" type="checkbox"> vision</label>
+            <label class="check"><input id="profile-function-calling" type="checkbox"> function_calling</label>
+            <label class="check"><input id="profile-json-output" type="checkbox"> json_output</label>
+            <label class="check"><input id="profile-structured-output" type="checkbox"> structured_output</label>
             <button type="submit">保存配置</button>
           </form>
           <button id="check-connections" type="button">检查连接</button>

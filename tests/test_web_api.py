@@ -235,6 +235,16 @@ class FakeWebApplication:
             ),
         )
 
+    def check_model_profile_connection(self, profile_id):
+        self.checked_profile_id = profile_id
+        return ModelConnectionStatus(
+            role="PROFILE",
+            model="qwen-plus",
+            ok=True,
+            message="ok",
+            elapsed_seconds=0.2,
+        )
+
     def _result(self, version):
         return RevisionRunResult(
             project_id="demo_20260627",
@@ -424,6 +434,18 @@ class WebApiEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["connections"][0]["ok"])
+
+    def test_check_single_model_profile_endpoint(self):
+        fake_app = FakeWebApplication()
+        client = TestClient(create_app(application=fake_app))
+
+        response = client.post("/api/model-profiles/writer-qwen/check")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["profile_id"], "writer-qwen")
+        self.assertEqual(response.json()["connection"]["role"], "PROFILE")
+        self.assertTrue(response.json()["connection"]["ok"])
+        self.assertEqual(fake_app.checked_profile_id, "writer-qwen")
 
     def test_open_artifact_endpoint_uses_injected_opener_for_project_path(self):
         opened = []

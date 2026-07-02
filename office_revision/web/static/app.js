@@ -330,7 +330,28 @@ async function loadModelProfiles() {
     for (const profile of payload.profiles) {
       const item = document.createElement("div");
       item.className = "item";
-      item.textContent = `${profile.name} / ${profile.model}`;
+      const title = createTextElement("div", "item-title", `${profile.name} / ${profile.model}`);
+      const capabilities = [
+        profile.enable_search ? "search" : null,
+        profile.vision ? "vision" : null,
+        profile.function_calling ? "tools" : null,
+        profile.json_output ? "json" : null,
+        profile.structured_output ? "structured" : null
+      ].filter(Boolean).join(", ") || "none";
+      const meta = createTextElement(
+        "div",
+        "item-meta",
+        `${profile.profile_id} | ${profile.provider} | ${profile.base_url || "no base_url"} | timeout ${profile.timeout_seconds}s | retries ${profile.max_retries} | ${profile.model_family} | ${capabilities}`
+      );
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      const checkButton = document.createElement("button");
+      checkButton.type = "button";
+      checkButton.className = "secondary";
+      checkButton.textContent = "检测此配置";
+      checkButton.addEventListener("click", () => checkModelProfile(profile.profile_id));
+      actions.appendChild(checkButton);
+      item.append(title, meta, actions);
       profilesEl.appendChild(item);
     }
     if (payload.profiles.length === 0) {
@@ -398,12 +419,30 @@ async function saveModelProfile(event) {
         model: document.querySelector("#profile-model").value,
         provider: document.querySelector("#profile-provider").value,
         base_url: document.querySelector("#profile-base-url").value,
-        api_key: document.querySelector("#profile-api-key").value
+        api_key: document.querySelector("#profile-api-key").value,
+        enable_search: document.querySelector("#profile-enable-search").checked,
+        model_family: document.querySelector("#profile-model-family").value,
+        vision: document.querySelector("#profile-vision").checked,
+        function_calling: document.querySelector("#profile-function-calling").checked,
+        json_output: document.querySelector("#profile-json-output").checked,
+        structured_output: document.querySelector("#profile-structured-output").checked,
+        timeout_seconds: Number(document.querySelector("#profile-timeout-seconds").value || 60),
+        max_retries: Number(document.querySelector("#profile-max-retries").value || 1)
       })
     });
     await loadModelProfiles();
   } catch (error) {
     profilesEl.textContent = error.message;
+  }
+}
+
+async function checkModelProfile(profileId) {
+  try {
+    const payload = await requestJson(`/api/model-profiles/${profileId}/check`, {method: "POST"});
+    const connection = payload.connection;
+    connectionStatusEl.textContent = `${profileId}: ${connection.ok ? "OK" : "失败"} (${connection.message})`;
+  } catch (error) {
+    connectionStatusEl.textContent = error.message;
   }
 }
 

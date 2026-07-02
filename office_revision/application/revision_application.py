@@ -113,6 +113,9 @@ class RevisionApplication:
     def check_model_connections(self) -> tuple[ModelConnectionStatus, ...]:
         return self.model_connections.check_model_connections()
 
+    def check_model_profile_connection(self, profile_id: str) -> ModelConnectionStatus:
+        return self.model_connections.check_model_profile_connection(profile_id)
+
     def list_model_profiles(self) -> tuple[ModelProfile, ...]:
         return self.model_profiles.list_model_profiles()
 

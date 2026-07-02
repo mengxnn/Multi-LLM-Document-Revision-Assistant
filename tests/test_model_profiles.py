@@ -188,6 +188,44 @@ class ModelProfileTests(unittest.TestCase):
                 self.assertEqual(seen[0].api_key, "profile-key")
                 self.assertEqual(seen[1].api_key, "env-reviewer")
 
+    def test_connection_check_can_target_single_profile(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profiles_path = Path(temp_dir) / "model_profiles.json"
+            profile_service = ModelProfileService(profiles_path)
+            profile_service.save_model_profile(
+                ModelProfileRequest(
+                    profile_id="qwen-plus",
+                    name="Qwen Plus",
+                    api_key="profile-key",
+                    base_url="https://dashscope.example/v1",
+                    model="qwen-plus",
+                    timeout_seconds=180,
+                    max_retries=3,
+                )
+            )
+            seen = []
+
+            def checker(settings_items):
+                seen.extend(settings_items)
+                return [
+                    ConnectionCheckResult(item.role, item.model, True, "ok", 0.2)
+                    for item in settings_items
+                ]
+
+            service = ModelConnectionService(
+                model_profiles_path=profiles_path,
+                checker=checker,
+            )
+
+            status = service.check_model_profile_connection("qwen-plus")
+
+            self.assertEqual(status.role, "PROFILE")
+            self.assertEqual(status.model, "qwen-plus")
+            self.assertTrue(status.ok)
+            self.assertEqual(seen[0].api_key, "profile-key")
+            self.assertEqual(seen[0].timeout_seconds, 180)
+            self.assertEqual(seen[0].max_retries, 3)
+
     def test_start_new_project_uses_active_profiles_for_real_runner(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             with clean_model_environment():
