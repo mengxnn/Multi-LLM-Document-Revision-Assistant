@@ -186,8 +186,12 @@ def create_app(
     def get_active_model_profile(role: str) -> dict[str, object | None]:
         active = revision_app.get_active_model_profile(role)
         if active is None:
-            return {"profile": None}
-        return active_model_profile_to_dict(active)
+            return {"role": role.upper(), "profile_id": None, "profile": None}
+        return {
+            "role": role.upper(),
+            "profile_id": active.profile_id,
+            "profile": model_profile_to_dict(active),
+        }
 
     @app.post("/api/model-profiles/{profile_id}/activate")
     def activate_model_profile(

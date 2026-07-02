@@ -11,6 +11,7 @@ warnings.filterwarnings(
 
 from fastapi.testclient import TestClient
 
+from office_revision.application import RevisionApplication
 from office_revision.application.contracts import (
     ActiveModelProfile,
     ArtifactLinks,
@@ -145,12 +146,7 @@ class FakeWebApplication:
 
     def get_active_model_profile(self, role):
         if role == "writer":
-            profile = self.list_model_profiles()[0]
-            return ActiveModelProfile(
-                role=role,
-                profile_id=profile.profile_id,
-                profile=profile,
-            )
+            return self.list_model_profiles()[0]
         return None
 
     def start_new_project(self, request, on_progress=None):
@@ -297,6 +293,28 @@ class WebApiEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["profile"]["profile_id"], "writer-qwen")
+
+    def test_get_active_model_profile_endpoint_serializes_real_profile(self):
+        with TemporaryDirectory() as temp_dir:
+            app = RevisionApplication(
+                model_profiles_path=Path(temp_dir) / "model_profiles.json"
+            )
+            profile = app.save_model_profile(
+                ModelProfileRequest(
+                    profile_id="qwen-plus",
+                    name="Qwen Plus",
+                    model="qwen-plus",
+                )
+            )
+            app.activate_model_profile("reviewer", profile.profile_id)
+            client = TestClient(create_app(application=app))
+
+            response = client.get("/api/model-profiles/active/reviewer")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["role"], "REVIEWER")
+        self.assertEqual(response.json()["profile_id"], "qwen-plus")
+        self.assertEqual(response.json()["profile"]["profile_id"], "qwen-plus")
 
     def test_start_project_endpoint_records_completed_run(self):
         fake_app = FakeWebApplication()

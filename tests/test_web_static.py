@@ -31,6 +31,7 @@ class WebStaticTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("loadProjects", response.text)
+        self.assertIn("response.text()", response.text)
         self.assertIn("continueProject", response.text)
         self.assertIn("deleteProject", response.text)
         self.assertIn('"skip"', response.text)
@@ -43,6 +44,10 @@ class WebStaticTests(TestCase):
         self.assertIn("chooseBaseVersion", response.text)
         self.assertIn("base_version_path", response.text)
         self.assertIn("checkModelProfile", response.text)
+        self.assertIn("loadActiveModelProfiles", response.text)
+        self.assertIn("activateModelProfile", response.text)
+        self.assertIn("/api/model-profiles/active/writer", response.text)
+        self.assertIn("/activate", response.text)
         self.assertIn("/check", response.text)
         self.assertIn("/api/artifacts/open", response.text)
         self.assertIn("打开文件", response.text)
@@ -82,6 +87,16 @@ class WebStaticTests(TestCase):
         self.assertIn("profile-function-calling", response.text)
         self.assertIn("profile-json-output", response.text)
         self.assertIn("profile-structured-output", response.text)
+
+    def test_model_profile_page_shows_active_role_slots(self):
+        client = TestClient(create_app())
+
+        response = client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("active-profiles", response.text)
+        self.assertIn("active-writer-profile", response.text)
+        self.assertIn("active-reviewer-profile", response.text)
 
     def test_run_gui_module_imports(self):
         import run_gui

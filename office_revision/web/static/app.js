@@ -2,6 +2,8 @@ const projectsEl = document.querySelector("#projects");
 const projectDetailEl = document.querySelector("#project-detail");
 const projectActionsEl = document.querySelector("#project-actions");
 const profilesEl = document.querySelector("#profiles");
+const activeWriterProfileEl = document.querySelector("#active-writer-profile");
+const activeReviewerProfileEl = document.querySelector("#active-reviewer-profile");
 const requirementsEl = document.querySelector("#requirements-text");
 const startButton = document.querySelector("#start-project");
 const runStatusEl = document.querySelector("#run-status");
@@ -25,9 +27,17 @@ function createTextElement(tagName, className, text) {
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, options);
-  const payload = await response.json();
+  const text = await response.text();
+  let payload = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch (error) {
+      throw new Error(response.ok ? "响应不是有效 JSON" : text);
+    }
+  }
   if (!response.ok) {
-    throw new Error(payload.detail || "请求失败");
+    throw new Error(payload.detail || text || "请求失败");
   }
   return payload;
 }
@@ -351,6 +361,8 @@ async function loadModelProfiles() {
       checkButton.textContent = "检测此配置";
       checkButton.addEventListener("click", () => checkModelProfile(profile.profile_id));
       actions.appendChild(checkButton);
+      actions.appendChild(createActivateProfileButton(profile.profile_id, "writer"));
+      actions.appendChild(createActivateProfileButton(profile.profile_id, "reviewer"));
       item.append(title, meta, actions);
       profilesEl.appendChild(item);
     }
@@ -407,6 +419,15 @@ async function startProject() {
   }
 }
 
+function createActivateProfileButton(profileId, role) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary";
+  button.textContent = `设为 ${role}`;
+  button.addEventListener("click", () => activateModelProfile(profileId, role));
+  return button;
+}
+
 async function saveModelProfile(event) {
   event.preventDefault();
   try {
@@ -431,8 +452,45 @@ async function saveModelProfile(event) {
       })
     });
     await loadModelProfiles();
+    await loadActiveModelProfiles();
   } catch (error) {
     profilesEl.textContent = error.message;
+  }
+}
+
+async function loadActiveModelProfiles() {
+  try {
+    const [writer, reviewer] = await Promise.all([
+      requestJson("/api/model-profiles/active/writer"),
+      requestJson("/api/model-profiles/active/reviewer")
+    ]);
+    renderActiveModelProfile(activeWriterProfileEl, "writer", writer.profile);
+    renderActiveModelProfile(activeReviewerProfileEl, "reviewer", reviewer.profile);
+  } catch (error) {
+    activeWriterProfileEl.textContent = error.message;
+    activeReviewerProfileEl.textContent = error.message;
+  }
+}
+
+function renderActiveModelProfile(element, role, profile) {
+  if (!profile) {
+    element.textContent = `${role}: 未设置`;
+    return;
+  }
+  element.textContent = `${role}: ${profile.name} / ${profile.model} (${profile.profile_id})`;
+}
+
+async function activateModelProfile(profileId, role) {
+  try {
+    const payload = await requestJson(`/api/model-profiles/${profileId}/activate`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({role})
+    });
+    connectionStatusEl.textContent = `${payload.role}: ${payload.profile.name} / ${payload.profile.model}`;
+    await loadActiveModelProfiles();
+  } catch (error) {
+    connectionStatusEl.textContent = error.message;
   }
 }
 
@@ -463,9 +521,13 @@ document.querySelectorAll(".tab").forEach((tab) => {
 document.querySelector("#refresh-all").addEventListener("click", () => {
   loadProjects();
   loadModelProfiles();
+  loadActiveModelProfiles();
 });
 document.querySelector("#refresh-projects").addEventListener("click", loadProjects);
-document.querySelector("#refresh-profiles").addEventListener("click", loadModelProfiles);
+document.querySelector("#refresh-profiles").addEventListener("click", () => {
+  loadModelProfiles();
+  loadActiveModelProfiles();
+});
 document.querySelector("#profile-form").addEventListener("submit", saveModelProfile);
 document.querySelector("#check-connections").addEventListener("click", checkConnections);
 document.querySelector("#continue-project").addEventListener("click", continueProject);
@@ -480,3 +542,4 @@ startButton.addEventListener("click", startProject);
 updateStartButton();
 loadProjects();
 loadModelProfiles();
+loadActiveModelProfiles();
