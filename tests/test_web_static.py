@@ -34,6 +34,7 @@ class WebStaticTests(TestCase):
         self.assertIn("response.text()", response.text)
         self.assertIn("continueProject", response.text)
         self.assertIn("deleteProject", response.text)
+        self.assertIn("clearProjectSelection", response.text)
         self.assertIn('"skip"', response.text)
         self.assertIn("permanent", response.text)
         self.assertIn("shortPath", response.text)
@@ -47,6 +48,8 @@ class WebStaticTests(TestCase):
         self.assertIn("loadActiveModelProfiles", response.text)
         self.assertIn("activateModelProfile", response.text)
         self.assertIn("deleteModelProfile", response.text)
+        self.assertIn("editModelProfile", response.text)
+        self.assertIn("editingProfileId", response.text)
         self.assertIn("/api/model-profiles/active/writer", response.text)
         self.assertIn('method: "DELETE"', response.text)
         self.assertIn("/activate", response.text)
@@ -74,6 +77,17 @@ class WebStaticTests(TestCase):
         self.assertIn("continue-feedback-text", response.text)
         self.assertIn("continue-project", response.text)
         self.assertIn("delete-permanent", response.text)
+
+    def test_project_detail_can_be_collapsed_from_javascript(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("if (selectedProjectId === projectId)", response.text)
+        self.assertIn("clearProjectSelection()", response.text)
+        self.assertIn("updateProjectDetailButtons", response.text)
+        self.assertIn("折叠详情", response.text)
 
     def test_model_profile_form_uses_user_friendly_basic_fields(self):
         client = TestClient(create_app())
@@ -130,6 +144,18 @@ class WebStaticTests(TestCase):
         self.assertIn("添加配置", response.text)
         self.assertIn('id="profiles"', response.text)
         self.assertIn('id="profile-form"', response.text)
+
+    def test_model_profile_javascript_supports_editing_existing_profile(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("createEditProfileButton", response.text)
+        self.assertIn("editModelProfile", response.text)
+        self.assertIn("editingProfileId", response.text)
+        self.assertIn("profile_id: editingProfileId", response.text)
+        self.assertIn("addProfileSectionEl.open = true", response.text)
 
     def test_run_gui_module_imports(self):
         import run_gui

@@ -2,6 +2,8 @@ const projectsEl = document.querySelector("#projects");
 const projectDetailEl = document.querySelector("#project-detail");
 const projectActionsEl = document.querySelector("#project-actions");
 const profilesEl = document.querySelector("#profiles");
+const addProfileSectionEl = document.querySelector("#add-profile-section");
+const profileAdvancedSettingsEl = document.querySelector("#profile-advanced-settings");
 const activeWriterProfileEl = document.querySelector("#active-writer-profile");
 const activeReviewerProfileEl = document.querySelector("#active-reviewer-profile");
 const requirementsEl = document.querySelector("#requirements-text");
@@ -11,6 +13,7 @@ const runEventsEl = document.querySelector("#run-events");
 const connectionStatusEl = document.querySelector("#connection-status");
 let selectedProjectId = null;
 let selectedBaseVersionPath = null;
+let editingProfileId = null;
 
 function setText(element, text) {
   element.textContent = text;
@@ -110,6 +113,7 @@ function renderProject(project) {
   const detailButton = document.createElement("button");
   detailButton.type = "button";
   detailButton.className = "secondary";
+  detailButton.dataset.projectId = project.project_id;
   detailButton.textContent = "详情";
   detailButton.addEventListener("click", () => loadProjectDetail(project.project_id));
 
@@ -129,6 +133,7 @@ async function loadProjects() {
     for (const project of payload.projects) {
       projectsEl.appendChild(renderProject(project));
     }
+    updateProjectDetailButtons();
     if (payload.projects.length === 0) {
       projectsEl.textContent = "暂无项目";
     }
@@ -138,15 +143,34 @@ async function loadProjects() {
 }
 
 async function loadProjectDetail(projectId) {
+  if (selectedProjectId === projectId) {
+    clearProjectSelection();
+    return;
+  }
   try {
     const detail = await requestJson(`/api/projects/${projectId}`);
     selectedProjectId = projectId;
     selectedBaseVersionPath = null;
     projectActionsEl.hidden = false;
     renderProjectDetail(detail);
+    updateProjectDetailButtons();
   } catch (error) {
     projectDetailEl.textContent = error.message;
   }
+}
+
+function clearProjectSelection() {
+  projectDetailEl.innerHTML = '<div class="empty-state">请选择一个项目查看详情。</div>';
+  projectActionsEl.hidden = true;
+  selectedProjectId = null;
+  selectedBaseVersionPath = null;
+  updateProjectDetailButtons();
+}
+
+function updateProjectDetailButtons() {
+  projectsEl.querySelectorAll("button[data-project-id]").forEach((button) => {
+    button.textContent = button.dataset.projectId === selectedProjectId ? "折叠详情" : "详情";
+  });
 }
 
 function renderProjectDetail(detail) {
@@ -361,6 +385,7 @@ async function loadModelProfiles() {
       checkButton.textContent = "检测此配置";
       checkButton.addEventListener("click", () => checkModelProfile(profile.profile_id));
       actions.appendChild(checkButton);
+      actions.appendChild(createEditProfileButton(profile));
       actions.appendChild(createActivateProfileButton(profile.profile_id, "writer"));
       actions.appendChild(createActivateProfileButton(profile.profile_id, "reviewer"));
       actions.appendChild(createDeleteProfileButton(profile));
@@ -429,6 +454,15 @@ function createActivateProfileButton(profileId, role) {
   return button;
 }
 
+function createEditProfileButton(profile) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary";
+  button.textContent = "编辑配置";
+  button.addEventListener("click", () => editModelProfile(profile));
+  return button;
+}
+
 function createDeleteProfileButton(profile) {
   const button = document.createElement("button");
   button.type = "button";
@@ -438,6 +472,24 @@ function createDeleteProfileButton(profile) {
   return button;
 }
 
+function editModelProfile(profile) {
+  editingProfileId = profile.profile_id;
+  document.querySelector("#profile-name").value = profile.name || "";
+  document.querySelector("#profile-model").value = profile.model || "";
+  document.querySelector("#profile-provider").value = profile.provider || "";
+  document.querySelector("#profile-base-url").value = profile.base_url || "";
+  document.querySelector("#profile-api-key").value = profile.api_key || "";
+  document.querySelector("#profile-enable-search").checked = Boolean(profile.enable_search);
+  document.querySelector("#profile-vision").checked = Boolean(profile.vision);
+  document.querySelector("#profile-function-calling").checked = Boolean(profile.function_calling);
+  document.querySelector("#profile-json-output").checked = Boolean(profile.json_output);
+  document.querySelector("#profile-structured-output").checked = Boolean(profile.structured_output);
+  document.querySelector("#profile-timeout-seconds").value = profile.timeout_seconds || "";
+  document.querySelector("#profile-max-retries").value = profile.max_retries ?? "";
+  addProfileSectionEl.open = true;
+  profileAdvancedSettingsEl.open = true;
+}
+
 async function saveModelProfile(event) {
   event.preventDefault();
   try {
@@ -445,6 +497,7 @@ async function saveModelProfile(event) {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
+        profile_id: editingProfileId,
         name: document.querySelector("#profile-name").value,
         model: document.querySelector("#profile-model").value,
         provider: document.querySelector("#profile-provider").value,
@@ -460,6 +513,9 @@ async function saveModelProfile(event) {
         max_retries: Number(document.querySelector("#profile-max-retries").value || 1)
       })
     });
+    editingProfileId = null;
+    document.querySelector("#profile-form").reset();
+    profileAdvancedSettingsEl.open = false;
     await loadModelProfiles();
     await loadActiveModelProfiles();
   } catch (error) {
