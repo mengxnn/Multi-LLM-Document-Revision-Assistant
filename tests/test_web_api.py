@@ -97,6 +97,7 @@ class FakeWebApplication:
         self.received_model_profile_request = None
         self.decisions = []
         self.deleted = []
+        self.deleted_model_profiles = []
         self.activated = []
 
     def list_projects(self):
@@ -219,6 +220,10 @@ class FakeWebApplication:
         self.activated.append((role, profile_id))
         profile = self.list_model_profiles()[0]
         return ActiveModelProfile(role=role, profile_id=profile_id, profile=profile)
+
+    def delete_model_profile(self, profile_id):
+        self.deleted_model_profiles.append(profile_id)
+        return profile_id == "writer-qwen"
 
     def check_model_connections(self):
         return (
@@ -444,6 +449,30 @@ class WebApiEndpointTests(TestCase):
         self.assertEqual(activated.status_code, 200)
         self.assertEqual(activated.json()["role"], "writer")
         self.assertEqual(fake_app.activated, [("writer", "p1")])
+
+    def test_save_model_profile_generates_profile_id_when_missing(self):
+        fake_app = FakeWebApplication()
+        client = TestClient(create_app(application=fake_app))
+
+        response = client.post(
+            "/api/model-profiles",
+            json={"name": "Qwen Plus", "model": "qwen-plus"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["profile_id"], "qwen-plus")
+        self.assertEqual(fake_app.received_model_profile_request.profile_id, "qwen-plus")
+
+    def test_delete_model_profile_endpoint(self):
+        fake_app = FakeWebApplication()
+        client = TestClient(create_app(application=fake_app))
+
+        response = client.delete("/api/model-profiles/writer-qwen")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["profile_id"], "writer-qwen")
+        self.assertTrue(response.json()["deleted"])
+        self.assertEqual(fake_app.deleted_model_profiles, ["writer-qwen"])
 
     def test_check_model_connections_endpoint(self):
         client = TestClient(create_app(application=FakeWebApplication()))

@@ -46,7 +46,9 @@ class WebStaticTests(TestCase):
         self.assertIn("checkModelProfile", response.text)
         self.assertIn("loadActiveModelProfiles", response.text)
         self.assertIn("activateModelProfile", response.text)
+        self.assertIn("deleteModelProfile", response.text)
         self.assertIn("/api/model-profiles/active/writer", response.text)
+        self.assertIn('method: "DELETE"', response.text)
         self.assertIn("/activate", response.text)
         self.assertIn("/check", response.text)
         self.assertIn("/api/artifacts/open", response.text)
@@ -73,20 +75,38 @@ class WebStaticTests(TestCase):
         self.assertIn("continue-project", response.text)
         self.assertIn("delete-permanent", response.text)
 
-    def test_model_profile_form_exposes_advanced_fields(self):
+    def test_model_profile_form_uses_user_friendly_basic_fields(self):
         client = TestClient(create_app())
 
         response = client.get("/")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("显示名称", response.text)
+        self.assertIn("模型ID", response.text)
+        self.assertIn("供应商类型", response.text)
+        self.assertNotIn('id="profile-id"', response.text)
+        self.assertNotIn('id="profile-model-family"', response.text)
+        self.assertNotIn('value="openai-compatible"', response.text)
+
+    def test_model_profile_form_collapses_advanced_fields(self):
+        client = TestClient(create_app())
+
+        response = client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="profile-advanced-settings"', response.text)
+        self.assertIn("高级设置", response.text)
         self.assertIn("profile-timeout-seconds", response.text)
         self.assertIn("profile-max-retries", response.text)
-        self.assertIn("profile-model-family", response.text)
         self.assertIn("profile-enable-search", response.text)
         self.assertIn("profile-vision", response.text)
         self.assertIn("profile-function-calling", response.text)
         self.assertIn("profile-json-output", response.text)
         self.assertIn("profile-structured-output", response.text)
+        self.assertIn('placeholder="60"', response.text)
+        self.assertIn('placeholder="1"', response.text)
+        self.assertNotIn('id="profile-timeout-seconds" type="number" min="1" value="60"', response.text)
+        self.assertNotIn('id="profile-max-retries" type="number" min="0" value="1"', response.text)
 
     def test_model_profile_page_shows_active_role_slots(self):
         client = TestClient(create_app())
@@ -97,6 +117,19 @@ class WebStaticTests(TestCase):
         self.assertIn("active-profiles", response.text)
         self.assertIn("active-writer-profile", response.text)
         self.assertIn("active-reviewer-profile", response.text)
+
+    def test_model_profile_sections_are_collapsible(self):
+        client = TestClient(create_app())
+
+        response = client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="existing-profiles-section"', response.text)
+        self.assertIn('id="add-profile-section"', response.text)
+        self.assertIn("现有配置", response.text)
+        self.assertIn("添加配置", response.text)
+        self.assertIn('id="profiles"', response.text)
+        self.assertIn('id="profile-form"', response.text)
 
     def test_run_gui_module_imports(self):
         import run_gui

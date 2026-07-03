@@ -245,8 +245,44 @@ button.danger {
   margin: 12px 0;
 }
 
+.profile-section {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.profile-section summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.profile-api-key,
+.advanced-settings,
 .profile-form button {
   grid-column: 1 / -1;
+}
+
+.advanced-settings {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.advanced-settings summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
 }
 
 #run-events {
@@ -267,6 +303,10 @@ button.danger {
   }
 
   .profile-form {
+    grid-template-columns: 1fr;
+  }
+
+  .advanced-grid {
     grid-template-columns: 1fr;
   }
 }

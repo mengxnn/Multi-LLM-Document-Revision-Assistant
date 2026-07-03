@@ -86,24 +86,54 @@
             <div id="active-writer-profile" class="item-meta">writer: -</div>
             <div id="active-reviewer-profile" class="item-meta">reviewer: -</div>
           </div>
-          <div id="profiles" class="list"></div>
-          <form id="profile-form" class="profile-form">
-            <input id="profile-id" placeholder="profile_id">
-            <input id="profile-name" placeholder="名称">
-            <input id="profile-model" placeholder="模型">
-            <input id="profile-provider" placeholder="provider" value="openai-compatible">
-            <input id="profile-base-url" placeholder="base_url">
-            <input id="profile-api-key" placeholder="api_key" type="password">
-            <input id="profile-model-family" placeholder="model_family" value="unknown">
-            <input id="profile-timeout-seconds" type="number" min="1" value="60" placeholder="timeout_seconds">
-            <input id="profile-max-retries" type="number" min="0" value="1" placeholder="max_retries">
-            <label class="check"><input id="profile-enable-search" type="checkbox"> enable_search</label>
-            <label class="check"><input id="profile-vision" type="checkbox"> vision</label>
-            <label class="check"><input id="profile-function-calling" type="checkbox"> function_calling</label>
-            <label class="check"><input id="profile-json-output" type="checkbox"> json_output</label>
-            <label class="check"><input id="profile-structured-output" type="checkbox"> structured_output</label>
+          <details id="existing-profiles-section" class="profile-section">
+            <summary>现有配置</summary>
+            <div id="profiles" class="list"></div>
+          </details>
+          <details id="add-profile-section" class="profile-section">
+            <summary>添加配置</summary>
+            <form id="profile-form" class="profile-form">
+            <label class="field" for="profile-name">
+              <span>显示名称</span>
+              <input id="profile-name" placeholder="例如：阿里云 Qwen Plus">
+            </label>
+            <label class="field" for="profile-model">
+              <span>模型ID</span>
+              <input id="profile-model" placeholder="例如：qwen-plus-latest">
+            </label>
+            <label class="field" for="profile-provider">
+              <span>供应商类型</span>
+              <input id="profile-provider" placeholder="例如：openai-compatible">
+            </label>
+            <label class="field" for="profile-base-url">
+              <span>请求地址</span>
+              <input id="profile-base-url" placeholder="https://your-api-endpoint.com">
+            </label>
+            <label class="field profile-api-key" for="profile-api-key">
+              <span>API Key</span>
+              <input id="profile-api-key" placeholder="只保存在本地配置文件中" type="password">
+            </label>
+            <details id="profile-advanced-settings" class="advanced-settings">
+              <summary>高级设置</summary>
+              <div class="advanced-grid">
+                <label class="field" for="profile-timeout-seconds">
+                  <span>超时时间（秒）</span>
+                  <input id="profile-timeout-seconds" type="number" min="1" placeholder="60">
+                </label>
+                <label class="field" for="profile-max-retries">
+                  <span>最大重试次数</span>
+                  <input id="profile-max-retries" type="number" min="0" placeholder="1">
+                </label>
+                <label class="check"><input id="profile-enable-search" type="checkbox"> enable_search</label>
+                <label class="check"><input id="profile-vision" type="checkbox"> vision</label>
+                <label class="check"><input id="profile-function-calling" type="checkbox"> function_calling</label>
+                <label class="check"><input id="profile-json-output" type="checkbox"> json_output</label>
+                <label class="check"><input id="profile-structured-output" type="checkbox"> structured_output</label>
+              </div>
+            </details>
             <button type="submit">保存配置</button>
-          </form>
+            </form>
+          </details>
           <button id="check-connections" type="button">检查连接</button>
           <div id="connection-status" class="detail"></div>
         </section>

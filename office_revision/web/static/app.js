@@ -363,6 +363,7 @@ async function loadModelProfiles() {
       actions.appendChild(checkButton);
       actions.appendChild(createActivateProfileButton(profile.profile_id, "writer"));
       actions.appendChild(createActivateProfileButton(profile.profile_id, "reviewer"));
+      actions.appendChild(createDeleteProfileButton(profile));
       item.append(title, meta, actions);
       profilesEl.appendChild(item);
     }
@@ -428,6 +429,15 @@ function createActivateProfileButton(profileId, role) {
   return button;
 }
 
+function createDeleteProfileButton(profile) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "danger";
+  button.textContent = "删除配置";
+  button.addEventListener("click", () => deleteModelProfile(profile));
+  return button;
+}
+
 async function saveModelProfile(event) {
   event.preventDefault();
   try {
@@ -435,14 +445,13 @@ async function saveModelProfile(event) {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
-        profile_id: document.querySelector("#profile-id").value,
         name: document.querySelector("#profile-name").value,
         model: document.querySelector("#profile-model").value,
         provider: document.querySelector("#profile-provider").value,
         base_url: document.querySelector("#profile-base-url").value,
         api_key: document.querySelector("#profile-api-key").value,
         enable_search: document.querySelector("#profile-enable-search").checked,
-        model_family: document.querySelector("#profile-model-family").value,
+        model_family: "unknown",
         vision: document.querySelector("#profile-vision").checked,
         function_calling: document.querySelector("#profile-function-calling").checked,
         json_output: document.querySelector("#profile-json-output").checked,
@@ -455,6 +464,23 @@ async function saveModelProfile(event) {
     await loadActiveModelProfiles();
   } catch (error) {
     profilesEl.textContent = error.message;
+  }
+}
+
+async function deleteModelProfile(profile) {
+  const label = profile.name || profile.profile_id;
+  if (!window.confirm(`确定删除模型配置“${label}”吗？`)) {
+    return;
+  }
+  try {
+    await requestJson(`/api/model-profiles/${profile.profile_id}`, {
+      method: "DELETE"
+    });
+    connectionStatusEl.textContent = `已删除配置：${label}`;
+    await loadModelProfiles();
+    await loadActiveModelProfiles();
+  } catch (error) {
+    connectionStatusEl.textContent = error.message;
   }
 }
 

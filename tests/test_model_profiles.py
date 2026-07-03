@@ -79,6 +79,31 @@ class ModelProfileTests(unittest.TestCase):
             with self.assertRaises(RevisionApplicationError):
                 service.activate_model_profile("reviewer", "missing")
 
+    def test_delete_model_profile_removes_profile_and_active_roles(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "model_profiles.json"
+            service = ModelProfileService(path)
+            service.save_model_profile(
+                ModelProfileRequest(
+                    profile_id="qwen-plus",
+                    name="Qwen Plus",
+                    model="qwen-plus",
+                )
+            )
+            service.activate_model_profile("writer", "qwen-plus")
+            service.activate_model_profile("reviewer", "qwen-plus")
+
+            deleted = service.delete_model_profile("qwen-plus")
+
+            self.assertTrue(deleted)
+            self.assertEqual(service.list_model_profiles(), ())
+            self.assertIsNone(service.get_active_model_profile("writer"))
+            self.assertIsNone(service.get_active_model_profile("reviewer"))
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertNotIn("qwen-plus", data["profiles"])
+            self.assertNotIn("WRITER", data["active"])
+            self.assertNotIn("REVIEWER", data["active"])
+
     def test_active_profile_overrides_env_settings_for_role(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             with clean_model_environment():

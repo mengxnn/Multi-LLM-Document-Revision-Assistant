@@ -36,6 +36,19 @@ class ModelProfileService:
         self._write(data)
         return profile
 
+    def delete_model_profile(self, profile_id: str) -> bool:
+        data = self._read()
+        if profile_id not in data["profiles"]:
+            return False
+        del data["profiles"][profile_id]
+        data["active"] = {
+            role: active_profile_id
+            for role, active_profile_id in data["active"].items()
+            if active_profile_id != profile_id
+        }
+        self._write(data)
+        return True
+
     def activate_model_profile(self, role: str, profile_id: str) -> ActiveModelProfile:
         role = self._normalize_role(role)
         data = self._read()

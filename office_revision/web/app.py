@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -164,10 +165,10 @@ def create_app(
     @app.post("/api/model-profiles")
     def save_model_profile(payload: dict[str, object]) -> dict[str, object]:
         request = ModelProfileRequest(
-            profile_id=str(payload.get("profile_id") or ""),
+            profile_id=_model_profile_id(payload),
             name=str(payload.get("name") or ""),
             model=str(payload.get("model") or ""),
-            provider=str(payload.get("provider") or "openai-compatible"),
+            provider=str(payload.get("provider") or ""),
             api_key=str(payload.get("api_key") or ""),
             base_url=str(payload.get("base_url") or ""),
             enable_search=_bool_value(payload.get("enable_search")),
@@ -181,6 +182,13 @@ def create_app(
         )
         profile = revision_app.save_model_profile(request)
         return model_profile_to_dict(profile)
+
+    @app.delete("/api/model-profiles/{profile_id}")
+    def delete_model_profile(profile_id: str) -> dict[str, object]:
+        deleted = revision_app.delete_model_profile(profile_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="model profile not found")
+        return {"profile_id": profile_id, "deleted": True}
 
     @app.get("/api/model-profiles/active/{role}")
     def get_active_model_profile(role: str) -> dict[str, object | None]:
@@ -257,6 +265,15 @@ def _optional_string(value: object) -> str | None:
     if not text:
         return None
     return text
+
+
+def _model_profile_id(payload: dict[str, object]) -> str:
+    explicit = str(payload.get("profile_id") or "").strip()
+    if explicit:
+        return explicit
+    source = str(payload.get("model") or payload.get("name") or "").strip()
+    generated = re.sub(r"[^A-Za-z0-9_.-]+", "-", source).strip(".-_")
+    return generated or "model-profile"
 
 
 def _int_value(value: object, *, default: int) -> int:

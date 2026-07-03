@@ -122,6 +122,9 @@ class RevisionApplication:
     def save_model_profile(self, request: ModelProfileRequest) -> ModelProfile:
         return self.model_profiles.save_model_profile(request)
 
+    def delete_model_profile(self, profile_id: str) -> bool:
+        return self.model_profiles.delete_model_profile(profile_id)
+
     def activate_model_profile(self, role: str, profile_id: str) -> ActiveModelProfile:
         return self.model_profiles.activate_model_profile(role, profile_id)
 
