@@ -1,464 +1,117 @@
-# 多 agent 办公文档修订助手
+# 多 Agent 办公文档修订助手
 
-这是一个多模型办公文档修订工具。基本流程是：
+这是一个本地运行的办公文档修订工具。你可以在网页里填写修改要求、配置大模型、生成修订稿，并继续基于历史版本修改。
 
-```text
-修改要求 + 可选初稿 + 可选会议纪要
--> writer 生成修改稿
--> reviewer 审查并给下一轮建议
--> 多轮循环
--> 输出 final_draft/final.docx / final_draft/final.md / reviews/revision_summary.docx / final_review_report/final_review_report.docx
-```
+## 快速启动
 
-## 1. 输入文件
+1. 解压项目压缩包。
+2. 确认电脑已安装 Python 3.10 或更高版本。
+3. 双击 `启动.bat`。
+4. 等待脚本创建虚拟环境、安装依赖并打开网页。
 
-默认输入目录是：
+默认网页地址：
 
 ```text
-inputs/
+http://127.0.0.1:8765/
 ```
 
-### 必填：修改要求
+如果启动失败，不要关闭黑色窗口，先查看里面的错误信息。
+
+## 第一次使用
+
+打开网页后，先进入“模型”页。
+
+1. 点击“添加配置”。
+2. 填写：
+   - 显示名称：给自己看的名称，如“阿里云 Qwen Plus”。
+   - 模型ID：实际传给供应商的模型名，如 `qwen-plus`。
+   - 供应商类型：可按供应商接口填写，如 `openai-compatible`。
+   - 请求地址：供应商的 API endpoint。
+   - API Key：供应商 API Key。
+3. 如有需要，展开“高级设置”，调整超时时间、重试次数、搜索、视觉等能力。
+4. 点击“保存配置”。
+5. 在“现有配置”里点击“检测此配置”。
+6. 检测通过后，分别点击“设为 writer”和“设为 reviewer”。
+
+writer 负责生成或改写文档；reviewer 负责审查并给出下一轮修改建议。
+
+## 新建项目
+
+进入“新建”页。
+
+1. 填写“修改要求”。这是必填项。
+2. 可选填写“初稿”和“会议纪要”。
+3. 设置轮数。
+4. 如只是测试流程，勾选 `dry-run`。
+5. 点击“开始修订”。
+
+运行进度会显示在右侧。生成完成后，到“项目”页查看结果。
+
+## 查看与继续修改
+
+进入“项目”页。
+
+- 点击“详情”查看项目版本、输入文件和产物路径。
+- 展开后按钮会变成“折叠详情”，再次点击可收起。
+- 点击“打开文件”可直接打开产物。
+- 点击“文件位置”可打开所在目录。
+- 如果要基于某个历史版本继续修改，先点击该版本的“基于此版继续”，再填写反馈并点击“继续修改”。
+
+## 模型配置管理
+
+在“模型”页可以管理多个模型配置。
+
+- “现有配置”：查看已保存配置。
+- “添加配置”：新增配置。
+- “编辑配置”：修改已有配置。
+- “删除配置”：删除不再使用的配置。
+- “设为 writer”：把该配置用于 writer。
+- “设为 reviewer”：把该配置用于 reviewer。
+
+如果删除的配置正在作为 writer 或 reviewer 使用，程序会自动取消对应激活状态。
+
+## 输出位置
+
+所有项目默认保存在：
 
 ```text
-inputs/requirements.md
+projects/
 ```
 
-这里写用户希望怎么改、输出什么类型文档、审查重点是什么。
-
-如果该文件不存在或内容为空，程序会停止并提示错误。
-
-### 可选：初稿或原文
-
-程序会按顺序自动查找：
-
-```text
-inputs/source.docx
-inputs/source.md
-inputs/source.txt
-```
-
-找到第一个存在的文件就作为初稿。支持：
-
-- `.docx`
-- `.md`
-- `.txt`
-
-如果没有 source 文件，或 source 文件内容为空，程序会进入“无初稿起草模式”：writer 会根据修改要求和可选会议纪要从零生成初稿。
-
-### 可选：会议纪要
-
-```text
-inputs/meeting_notes.md
-```
-
-如果存在且内容不为空，writer 和 reviewer 都会参考会议纪要。
-
-如果该文件不存在或内容为空，程序会按“没有会议纪要”处理。
-
-### 示例模板
-
-仓库中保留示例模板：
-
-```text
-inputs/source.example.docx
-inputs/requirements.example.md
-inputs/meeting_notes.example.md
-```
-
-真实办公文件不会提交到 git。首次使用时可以复制模板：
-
-```powershell
-Copy-Item .\inputs\source.example.docx .\inputs\source.docx
-Copy-Item .\inputs\requirements.example.md .\inputs\requirements.md
-Copy-Item .\inputs\meeting_notes.example.md .\inputs\meeting_notes.md
-```
-
-如果没有初稿，不需要创建 `source.docx`。
-
-如果没有会议纪要，不需要创建 `meeting_notes.md`。
-
-## 2. API 配置
-
-配置文件：
-
-```text
-config/settings.env
-```
-
-如果该文件不存在，先复制模板：
-
-```powershell
-Copy-Item .\config\settings.example.env .\config\settings.env
-```
-
-writer 和 reviewer 可以使用不同平台、不同 key、不同模型：
-
-```text
-WRITER_API_KEY=writer 的 API key
-WRITER_BASE_URL=writer 的接口地址
-WRITER_MODEL=writer 使用的模型名
-WRITER_ENABLE_SEARCH=true
-WRITER_TIMEOUT_SECONDS=60
-WRITER_MAX_RETRIES=1
-
-REVIEWER_API_KEY=reviewer 的 API key
-REVIEWER_BASE_URL=reviewer 的接口地址
-REVIEWER_MODEL=reviewer 使用的模型名
-REVIEWER_ENABLE_SEARCH=true
-REVIEWER_TIMEOUT_SECONDS=60
-REVIEWER_MAX_RETRIES=1
-```
-
-连接测试：
-
-```powershell
-.\scripts\check_connections.ps1
-```
-
-如果真实运行时经常长时间等待，可以把 `WRITER_TIMEOUT_SECONDS`、`REVIEWER_TIMEOUT_SECONDS` 调小，例如 `30`；把 `WRITER_MAX_RETRIES`、`REVIEWER_MAX_RETRIES` 保持为 `1` 可以减少失败后的重复等待。连接测试和正式运行都会显示每次请求的大致耗时。
-
-## 8. 版本目录结构
-
-新生成的版本目录只使用新版结构。`latest/` 会保留为最新版本副本，方便直接打开，也可以在用户误改 `latest/` 时保留时间戳版本目录里的原始结果。
-
-```text
-projects/项目实施方案修订_20260615/
-  inputs/
-    source.docx
-    requirements.md
-    meeting_notes.md
-    feedback.md
-
-  outputs/
-    193728-pending-v1/
-      final_draft/
-        final.docx
-        final.md
-
-      reviews/
-        round_01_review.md
-        round_02_review.md
-        revision_summary.docx
-        revision_summary.md
-
-      final_review_report/
-        final_review_report.docx
-        final_review_report.md
-
-      metadata/
-        manifest.json
-        run_log.json
-        session_status.json
-
-    latest/
-      final_draft/
-      reviews/
-      final_review_report/
-      metadata/
-
-  metadata/
-    project.json
-    latest.json
-```
-
-目录用途：
-
-- `final_draft/`：本次版本的最终修改稿。
-- `reviews/`：每一轮审查意见，例如 `round_01_review.md`、`round_02_review.md`；同时保存 `revision_summary.md/docx`，用于汇总本次运行中各轮 writer 修改和 reviewer 审查情况。
-- `final_review_report/`：最终人工复核报告，重点列出完成情况、仍需人工确认的问题、事实与格式风险，通常是交付前最值得先看的文件。
-- `metadata/`：程序读取的 manifest、运行日志和状态文件。
-
-程序读取版本文件时使用 `metadata/manifest.json` 和新版目录结构。
-
-## 8. Continue 继续修改
-
-如果对某次结果不满意，可以在对应项目目录里填写反馈：
-
-```text
-projects/<项目名_YYYYMMDD>/inputs/feedback.md
-```
-
-然后运行：
-
-```powershell
-.\scripts\continue_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>"
-```
-
-也可以直接指定某个历史版本目录，适合用 Tab 补全选择基于哪一版继续：
-
-```powershell
-.\scripts\continue_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>\outputs\<HHMMSS-pending-v1>"
-.\scripts\continue_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>\dry_run_outputs\<HHMMSS-pending-v1>"
-```
-
-如果只传项目目录，默认基于 `latest` 继续修改；如果传具体版本目录，则基于该版本继续修改。
-
-运行 continue 前，必须在项目目录的 `inputs/feedback.md` 中填写真实反馈。如果该文件不存在、为空，或仍然是默认模板内容，程序会停止并提示先填写反馈，避免误用空反馈继续生成。
-
-dry-run 测试：
-
-```powershell
-.\scripts\continue_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -DryRun
-```
-
-continue 会读取上一版 `latest/final_draft/final.md` 或 `latest/final_draft/final.docx`，结合 `inputs/feedback.md` 进行整体重写，并输出到：
-
-```text
-projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-continue-v2>/
-```
-
-其中初次生成结果通常是 `<HHMMSS-pending-v1>`，第一次 continue 是 `<HHMMSS-continue-v2>`，后续依次为 `v3`、`v4`。如果同一天同一项目名下重复运行，版本号会继续递增，不会一直停留在 `v1`。
-
-如果使用 `-DryRun`，结果会输出到 `dry_run_outputs/<HHMMSS-continue-v2>/`。
-
-每次生成新版本后，终端会提示：
-
-```text
-使用下面的命令进行状态标记：
-.\scripts\review_project.ps1 -ProjectDir "..."
-```
-
-可以用这条命令把新版本标记为 `accept`、`continue`、`abandon` 或 `skip`。
-
-## 9. 选择采纳、放弃或暂不处理
-
-查看某次 `pending` 结果后，可以运行：
-
-```powershell
-.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>"
-```
-
-也可以直接指定某个版本目录：
-
-```powershell
-.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>\outputs\<HHMMSS-continue-v2>"
-.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>\dry_run_outputs\<HHMMSS-continue-v2>"
-```
-
-如果只传项目目录，默认处理 `latest`；如果传具体版本目录，则只标记该版本。
-
-程序会提示选择：
-
-```text
-accept   采纳当前结果
-continue 标记为继续修改
-abandon  放弃当前结果
-skip     暂不处理，保持 pending
-```
-
-也可以直接指定：
-
-```powershell
-.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -Decision accept
-.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -Decision continue
-.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -Decision abandon
-.\scripts\review_project.ps1 -ProjectDir ".\projects\<项目名_YYYYMMDD>" -Decision skip
-```
-
-`accept`、`continue` 和 `abandon` 会把最新版本目录名里的状态标签替换成对应标签，例如：
-
-```text
-193728-pending-v1 -> 193728-accept-v1
-193728-pending-v1 -> 193728-continue-v1
-193728-pending-v1 -> 193728-abandon-v1
-193728-accept-v1 -> 193728-abandon-v1
-```
-
-选择 `continue` 后，先在项目目录的 `inputs/feedback.md` 中填写反馈，再运行 `continue_project.ps1` 生成下一版。`skip` 会把当前结果标回 `pending`，并提示之后继续选择时可以使用的命令。
-
-如果项目只有 dry-run 输出，`review_project.ps1` 和 `continue_project.ps1` 会自动使用 `dry_run_outputs`，不需要额外指定 `-DryRun`；也可以显式加 `-DryRun`。
-
-## 3. 运行
-
-演示/测试流程，不调用真实大模型：
-
-```powershell
-.\scripts\run_demo_docx.ps1
-```
-
-正式流程，调用真实大模型：
-
-```powershell
-.\scripts\run_real_docx.ps1
-```
-
-如果希望让大模型生成修改说明汇总：
-
-```powershell
-.\scripts\run_real_docx.ps1 -SummaryMode llm
-```
-
-也可以直接运行：
-
-```powershell
-.\.venv\Scripts\python.exe .\run_revision.py
-```
-
-常用参数：
-
-```powershell
-.\.venv\Scripts\python.exe .\run_revision.py `
-  --source .\inputs\other.docx `
-  --requirements .\inputs\other_requirements.md `
-  --meeting-notes .\inputs\meeting_notes.md `
-  --summary-mode rule `
-  --cycles 5
-```
-
-其中 `--source` 和 `--meeting-notes` 都是可选的。
-
-`--summary-mode` 可选：
-
-- `rule`：默认值，用程序规则生成 `reviews/revision_summary`，稳定、不额外调用大模型。
-- `llm`：使用 reviewer 的 API、base URL、模型压缩较长的摘要字段，再由程序按固定格式生成 `reviews/revision_summary`。
-
-## 4. 输出目录
-
-默认情况下，程序会创建一个项目目录：
-
-```text
-projects/<项目名_YYYYMMDD>/
-  inputs/
-  outputs/
-  dry_run_outputs/
-  metadata/
-    project.json
-    latest.json
-```
-
-`<项目名>` 会先用本地规则生成。建议在 `requirements.md` 开头写一行 `题目：xxx` 或 `标题：xxx`，程序会优先用它作为项目名；否则优先取 source 文件名，再尝试识别 `调研报告`、`项目实施方案`、`申请书`、`论文` 等文档类型，最后才截取 requirements 内容摘要。真实模型运行结束后，reviewer 会根据最终稿生成 `final_suggested_title`，保存到 `metadata/project.json`，并在普通新任务中自动尝试重命名项目目录。`continue_project.ps1` 不会重命名项目目录。目录名会自动清洗 Windows 不允许的字符。
-
-如果同一天生成了同名项目，程序会自动新建独立目录，例如 `项目名_20260616_02`、`项目名_20260616_03`，不会把新的独立任务混入旧项目的 v2、v3。只有使用 `continue_project.ps1` 继续修改同一项目时，才会在原项目里递增版本。自动重命名前，终端会提示暂时不要用 Word/WPS/记事本打开本项目文件；如果目录被占用，程序会每 7 秒重试一次，最多重试 3 次。仍失败时不会中断输出，会在 `metadata/project.json` 中记录 `rename_status` 和 `rename_reason`。
-
-dry-run 输出到：
-
-```text
-projects/<项目名_YYYYMMDD>/dry_run_outputs/<HHMMSS-pending-v1>
-projects/<项目名_YYYYMMDD>/dry_run_outputs/latest
-```
-
-真实模型输出到：
-
-```text
-projects/<项目名_YYYYMMDD>/outputs/<HHMMSS-pending-v1>
-projects/<项目名_YYYYMMDD>/outputs/latest
-```
-
-项目目录里的 `inputs/` 会保存本次使用的输入文件快照，方便回看当时用的是哪份 source、requirements 和 meeting_notes。
-
-如果 `latest` 里的 Word 文件正被打开，刷新 `latest` 可能会被跳过，但时间戳目录仍会保留本次结果。
-
-真实模型运行时，终端会用 `-------` 分隔 writer / reviewer 的每次调用，并显示当前步骤和耗时。第 2 轮以后，writer 和 reviewer 默认只读取上一版 draft、上一轮 review、修改要求等必要上下文，不再反复读取初始 source 和会议纪要，以减少后续轮次耗时。
-
-主要输出：
+常见产物包括：
 
 ```text
 final_draft/final.docx
 final_draft/final.md
-reviews/round_01_review.md
-reviews/revision_summary.docx
 reviews/revision_summary.md
-final_review_report/final_review_report.docx
+reviews/revision_summary.docx
 final_review_report/final_review_report.md
+final_review_report/final_review_report.docx
 metadata/run_log.json
 ```
 
-`reviews/revision_summary` 是本次运行的多轮修改说明汇总，包含运行概况、输入材料、每轮修改与审查摘要、最终结论，以及自动识别出的“需补充 / 需核实 / 待确认 / TODO”等人工处理事项。
+dry-run 输出在 `dry_run_outputs/`，真实模型输出在 `outputs/`。
 
-`reviews/revision_summary` 有两种生成方式：
 
-- 默认规则生成：程序根据每轮 writer 草稿、reviewer 审查、最终稿自动整理。
-- LLM 压缩生成：运行时加 `--summary-mode llm`，由 reviewer 模型压缩较长字段，程序负责保留固定格式和运行事实。
+## 常见问题
 
-LLM 模式下，程序会固定保留以下结构：
+### 启动时提示找不到 Python
 
-```text
-# 修改说明汇总
-## 一、运行概况
-## 二、输入材料
-## 三、每轮修改与审查摘要
-## 四、最终结论
-## 五、需人工补充或核实事项
-```
+请先安装 Python 3.10 或更高版本，并确保安装时勾选“Add Python to PATH”。
 
-其中运行概况、输入材料、轮数、评分、是否继续修改、停止原因等事实字段由程序填写，不交给大模型改写。大模型只负责压缩这些较长字段：
+### 第一次启动很慢
 
-```text
-writer 草稿摘要
-reviewer 审查摘要
-给 writer 的修改指令
-最终审查摘要
-需人工补充或核实事项
-```
+第一次会创建 `.venv` 虚拟环境并安装依赖，耗时取决于网络。之后启动会快很多。
 
-如果 LLM 调用失败，或返回内容无法解析，程序会自动退回规则生成，不影响最终稿输出。可在 `metadata/run_log.json` 中查看：
+### 连接检测正常，但运行失败
 
-```text
-summary_mode_requested
-summary_mode_used
-summary_fallback_reason
-```
+可能是模型供应商接口不稳定、免费模型限制、超时或上下文过长。可以尝试：
 
-`final_review_report` 是最终人工复核报告，更偏向交付前检查：它会汇总最终结论、修改要求完成情况、仍需人工确认的问题、事实与数据风险、格式与表达风险，以及下一步建议。正式运行生成该报告时，终端会显示 `[收尾] 正在生成最终人工复核报告 final_review_report...`。
+- 换一个模型配置。
+- 增大超时时间。
+- 减少运行轮数。
+- 先用 `dry-run` 确认本地流程正常。
 
-每轮结果：
+### 产物打不开或找不到
 
-```text
-drafts/
-  round_01_draft.md
-  round_01_draft.docx
-
-reviews/
-  round_01_review.md
-  round_01_review.docx
-```
-
-## 5. reviewer 提前停止
-
-reviewer 会输出固定结构，其中包括：
-
-```text
-是否继续修改：是/否
-总体评分：1-5
-```
-
-如果 reviewer 写：
-
-```text
-是否继续修改：否
-```
-
-程序会提前停止，不再跑满 `--cycles`。
-
-## 6. 当前 Word 支持范围
-
-已支持：
-
-- `.docx` 读取标题、段落、表格文本
-- `.docx` 输出最终稿和每轮稿件
-- 加粗文本
-- 表格内换行
-- 跳过 Markdown 表格分隔行
-
-暂不完整支持：
-
-- `.doc` 老格式
-- 复杂页眉页脚
-- Word 批注
-- 修订痕迹
-- 文本框和复杂版式
-
-## 7. 判断本地流程是否正常
-
-运行测试：
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -v
-```
-
-看到 `OK` 表示本地程序逻辑正常。API 是否可用仍以连接测试为准：
-
-```powershell
-.\scripts\check_connections.ps1
-```
+到“项目”页点击“详情”，使用“打开文件”或“文件位置”按钮查看。
