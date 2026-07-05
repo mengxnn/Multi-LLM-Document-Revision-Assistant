@@ -59,6 +59,20 @@
 
         <section id="view-new-project" class="view">
           <h2>新建项目</h2>
+          <div class="upload-grid">
+            <label class="file-field" for="requirements-file">
+              <span>上传修改要求文件（docx/md/txt，可选）</span>
+              <input id="requirements-file" type="file" accept=".docx,.md,.txt">
+            </label>
+            <label class="file-field" for="source-file">
+              <span>上传初稿文件（docx/md/txt，可选）</span>
+              <input id="source-file" type="file" accept=".docx,.md,.txt">
+            </label>
+            <label class="file-field" for="meeting-notes-file">
+              <span>上传会议纪要文件（docx/md/txt，可选）</span>
+              <input id="meeting-notes-file" type="file" accept=".docx,.md,.txt">
+            </label>
+          </div>
           <label for="requirements-text">修改要求</label>
           <textarea id="requirements-text" rows="7" placeholder="请输入修改要求，必填"></textarea>
 

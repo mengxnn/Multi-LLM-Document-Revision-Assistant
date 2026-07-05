@@ -344,6 +344,112 @@ class WebApiEndpointTests(TestCase):
         self.assertIsInstance(fake_app.received_start_request, StartProjectRequest)
         self.assertEqual(fake_app.received_start_request.requirements_text, "请写一份计划")
 
+    def test_start_project_upload_endpoint_writes_files_and_passes_paths(self):
+        fake_app = FakeWebApplication()
+        with TemporaryDirectory() as temp_dir:
+            projects_root = Path(temp_dir) / "projects"
+            client = TestClient(
+                create_app(
+                    application=fake_app,
+                    run_store=InMemoryRunStore(),
+                    run_synchronously=True,
+                    projects_root=projects_root,
+                )
+            )
+
+            response = client.post(
+                "/api/projects/start-upload",
+                data={"cycles": "1", "dry_run": "true"},
+                files={
+                    "requirements_file": ("requirements.md", b"Improve this.", "text/markdown"),
+                    "source_file": ("source.txt", b"Original draft.", "text/plain"),
+                    "meeting_notes_file": ("meeting.md", b"Keep it short.", "text/markdown"),
+                },
+            )
+            poll = client.get(f"/api/runs/{response.json()['run_id']}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(poll.json()["status"], "completed")
+        request = fake_app.received_start_request
+        self.assertIsInstance(request, StartProjectRequest)
+        self.assertIsNone(request.requirements_text)
+        self.assertIsNone(request.source_text)
+        self.assertIsNone(request.meeting_notes_text)
+        self.assertEqual(Path(request.requirements_path).suffix, ".md")
+        self.assertEqual(Path(request.source_path).suffix, ".txt")
+        self.assertEqual(Path(request.meeting_notes_path).suffix, ".md")
+
+    def test_start_project_upload_endpoint_rejects_unsupported_files_and_cleans_uploads(self):
+        with TemporaryDirectory() as temp_dir:
+            projects_root = Path(temp_dir) / "projects"
+            client = TestClient(
+                create_app(
+                    application=FakeWebApplication(),
+                    run_store=InMemoryRunStore(),
+                    run_synchronously=True,
+                    projects_root=projects_root,
+                )
+            )
+
+            response = client.post(
+                "/api/projects/start-upload",
+                files={
+                    "requirements_file": ("requirements.md", b"Improve this.", "text/markdown"),
+                    "source_file": ("source.exe", b"nope", "application/octet-stream"),
+                },
+            )
+
+            self.assertEqual(response.status_code, 400)
+            self.assertFalse((projects_root / ".uploads").exists())
+
+    def test_start_project_upload_endpoint_preserves_suffix_for_non_ascii_filenames(self):
+        fake_app = FakeWebApplication()
+        with TemporaryDirectory() as temp_dir:
+            client = TestClient(
+                create_app(
+                    application=fake_app,
+                    run_store=InMemoryRunStore(),
+                    run_synchronously=True,
+                    projects_root=Path(temp_dir) / "projects",
+                )
+            )
+
+            response = client.post(
+                "/api/projects/start-upload",
+                data={"cycles": "1", "dry_run": "true"},
+                files={
+                    "requirements_file": ("修改要求.md", b"Improve this.", "text/markdown"),
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Path(fake_app.received_start_request.requirements_path).suffix, ".md")
+
+    def test_start_project_upload_endpoint_keeps_same_named_fields_separate(self):
+        fake_app = FakeWebApplication()
+        with TemporaryDirectory() as temp_dir:
+            client = TestClient(
+                create_app(
+                    application=fake_app,
+                    run_store=InMemoryRunStore(),
+                    run_synchronously=True,
+                    projects_root=Path(temp_dir) / "projects",
+                )
+            )
+
+            response = client.post(
+                "/api/projects/start-upload",
+                data={"cycles": "1", "dry_run": "true"},
+                files={
+                    "requirements_file": ("input.md", b"Requirements", "text/markdown"),
+                    "source_file": ("input.md", b"Source", "text/markdown"),
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        request = fake_app.received_start_request
+        self.assertNotEqual(request.requirements_path, request.source_path)
+
     def test_start_project_requires_requirements(self):
         client = TestClient(
             create_app(

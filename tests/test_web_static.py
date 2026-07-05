@@ -78,6 +78,29 @@ class WebStaticTests(TestCase):
         self.assertIn("continue-project", response.text)
         self.assertIn("delete-permanent", response.text)
 
+    def test_new_project_form_accepts_source_requirement_and_meeting_files(self):
+        client = TestClient(create_app())
+
+        response = client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="requirements-file"', response.text)
+        self.assertIn('id="source-file"', response.text)
+        self.assertIn('id="meeting-notes-file"', response.text)
+        self.assertIn('accept=".docx,.md,.txt"', response.text)
+
+    def test_start_project_javascript_submits_multipart_form_data(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("new FormData()", response.text)
+        self.assertIn("/api/projects/start-upload", response.text)
+        self.assertIn("requirements_file", response.text)
+        self.assertIn("source_file", response.text)
+        self.assertIn("meeting_notes_file", response.text)
+
     def test_project_detail_can_be_collapsed_from_javascript(self):
         client = TestClient(create_app())
 

@@ -195,6 +195,19 @@ input {
   align-items: end;
 }
 
+.upload-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.file-field {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
 .form-row label {
   margin: 0;
 }
@@ -303,6 +316,10 @@ button.danger {
   }
 
   .profile-form {
+    grid-template-columns: 1fr;
+  }
+
+  .upload-grid {
     grid-template-columns: 1fr;
   }
 

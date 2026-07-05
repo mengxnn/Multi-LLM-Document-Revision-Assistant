@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -97,6 +99,79 @@ def create_app(
                 runs.mark_failed(record.run_id, stage=exc.stage, message=str(exc))
             except Exception as exc:
                 runs.mark_failed(record.run_id, stage="unexpected", message=str(exc))
+
+        _run_worker(worker, executor=executor, run_synchronously=run_synchronously)
+        return {"run_id": record.run_id}
+
+    @app.post("/api/projects/start-upload")
+    def start_project_upload(
+        requirements_text: str | None = Form(default=None),
+        source_text: str | None = Form(default=None),
+        meeting_notes_text: str | None = Form(default=None),
+        project_title: str | None = Form(default=None),
+        cycles: int = Form(default=2),
+        dry_run: bool = Form(default=False),
+        summary_mode: str = Form(default="rule"),
+        requirements_file: UploadFile | None = File(default=None),
+        source_file: UploadFile | None = File(default=None),
+        meeting_notes_file: UploadFile | None = File(default=None),
+    ) -> dict[str, str]:
+        upload_dir = safe_projects_root / ".uploads" / uuid.uuid4().hex
+        try:
+            requirements_path = _save_upload_file(
+                requirements_file,
+                upload_dir=upload_dir,
+                field_name="requirements_file",
+            )
+            source_path = _save_upload_file(
+                source_file,
+                upload_dir=upload_dir,
+                field_name="source_file",
+            )
+            meeting_notes_path = _save_upload_file(
+                meeting_notes_file,
+                upload_dir=upload_dir,
+                field_name="meeting_notes_file",
+            )
+        except HTTPException:
+            _cleanup_upload_dir(upload_dir)
+            raise
+        requirements_text = _optional_string(requirements_text)
+        if not requirements_text and not requirements_path:
+            _cleanup_upload_dir(upload_dir)
+            raise HTTPException(
+                status_code=400,
+                detail="requirements_text or requirements_file is required",
+            )
+
+        request = StartProjectRequest(
+            requirements_text=None if requirements_path else requirements_text,
+            requirements_path=requirements_path,
+            source_text=None if source_path else _optional_string(source_text),
+            source_path=source_path,
+            meeting_notes_text=None if meeting_notes_path else _optional_string(meeting_notes_text),
+            meeting_notes_path=meeting_notes_path,
+            project_title=_optional_string(project_title),
+            cycles=cycles,
+            dry_run=dry_run,
+            summary_mode=summary_mode,
+        )
+        record = runs.create_run(kind="start_project", project_id=None)
+
+        def worker() -> None:
+            runs.mark_running(record.run_id)
+            try:
+                result = revision_app.start_new_project(
+                    request,
+                    on_progress=lambda event: runs.append_event(record.run_id, event),
+                )
+                runs.mark_completed(record.run_id, result)
+            except RevisionApplicationError as exc:
+                runs.mark_failed(record.run_id, stage=exc.stage, message=str(exc))
+            except Exception as exc:
+                runs.mark_failed(record.run_id, stage="unexpected", message=str(exc))
+            finally:
+                _cleanup_upload_dir(upload_dir)
 
         _run_worker(worker, executor=executor, run_synchronously=run_synchronously)
         return {"run_id": record.run_id}
@@ -296,6 +371,49 @@ def _run_worker(
         worker()
     else:
         executor.submit(worker)
+
+
+def _save_upload_file(
+    upload: UploadFile | None,
+    *,
+    upload_dir: Path,
+    field_name: str,
+) -> str | None:
+    if upload is None or not upload.filename:
+        return None
+    filename = Path(upload.filename).name
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".docx", ".md", ".txt"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_name} must be a .docx, .md, or .txt file",
+        )
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = _safe_upload_name(filename, fallback=f"upload{suffix}")
+    target = upload_dir / f"{field_name}-{safe_name}"
+    with target.open("wb") as output:
+        shutil.copyfileobj(upload.file, output)
+    return str(target)
+
+
+def _safe_upload_name(filename: str, *, fallback: str) -> str:
+    original = Path(filename).name
+    suffix = Path(original).suffix.lower()
+    stem = Path(original).stem
+    cleaned_stem = re.sub(r"[^A-Za-z0-9_.-]+", "-", stem).strip(".-_")
+    if cleaned_stem:
+        return f"{cleaned_stem}{suffix}"
+    return fallback
+
+
+def _cleanup_upload_dir(upload_dir: Path) -> None:
+    if upload_dir.exists():
+        shutil.rmtree(upload_dir, ignore_errors=True)
+    parent = upload_dir.parent
+    try:
+        parent.rmdir()
+    except OSError:
+        pass
 
 
 def _resolve_project_path(path_text: str, *, projects_root: Path) -> Path:

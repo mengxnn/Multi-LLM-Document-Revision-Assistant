@@ -7,6 +7,9 @@ const profileAdvancedSettingsEl = document.querySelector("#profile-advanced-sett
 const activeWriterProfileEl = document.querySelector("#active-writer-profile");
 const activeReviewerProfileEl = document.querySelector("#active-reviewer-profile");
 const requirementsEl = document.querySelector("#requirements-text");
+const requirementsFileEl = document.querySelector("#requirements-file");
+const sourceFileEl = document.querySelector("#source-file");
+const meetingNotesFileEl = document.querySelector("#meeting-notes-file");
 const startButton = document.querySelector("#start-project");
 const runStatusEl = document.querySelector("#run-status");
 const runEventsEl = document.querySelector("#run-events");
@@ -401,7 +404,7 @@ async function loadModelProfiles() {
 }
 
 function updateStartButton() {
-  startButton.disabled = requirementsEl.value.trim().length === 0;
+  startButton.disabled = requirementsEl.value.trim().length === 0 && requirementsFileEl.files.length === 0;
 }
 
 async function pollRun(runId) {
@@ -426,16 +429,16 @@ async function pollRun(runId) {
 
 async function startProject() {
   try {
-    const payload = await requestJson("/api/projects/start", {
+    const formData = new FormData();
+    appendTextOrFile(formData, "requirements_text", requirementsEl, "requirements_file", requirementsFileEl);
+    appendTextOrFile(formData, "source_text", document.querySelector("#source-text"), "source_file", sourceFileEl);
+    appendTextOrFile(formData, "meeting_notes_text", document.querySelector("#meeting-notes-text"), "meeting_notes_file", meetingNotesFileEl);
+    formData.append("cycles", String(Number(document.querySelector("#cycles").value || 2)));
+    formData.append("dry_run", document.querySelector("#dry-run").checked ? "true" : "false");
+
+    const payload = await requestJson("/api/projects/start-upload", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        requirements_text: requirementsEl.value,
-        source_text: document.querySelector("#source-text").value,
-        meeting_notes_text: document.querySelector("#meeting-notes-text").value,
-        cycles: Number(document.querySelector("#cycles").value || 2),
-        dry_run: document.querySelector("#dry-run").checked
-      })
+      body: formData
     });
     setText(runStatusEl, "started");
     runEventsEl.innerHTML = "";
@@ -443,6 +446,14 @@ async function startProject() {
   } catch (error) {
     setText(runStatusEl, error.message);
   }
+}
+
+function appendTextOrFile(formData, textName, textElement, fileName, fileElement) {
+  if (fileElement.files.length > 0) {
+    formData.append(fileName, fileElement.files[0]);
+    return;
+  }
+  formData.append(textName, textElement.value);
 }
 
 function createActivateProfileButton(profileId, role) {
@@ -619,6 +630,7 @@ document.querySelector("#decision-skip").addEventListener("click", () => applyDe
 document.querySelector("#decision-abandon").addEventListener("click", () => applyDecision(selectedProjectId, "abandon"));
 document.querySelector("#delete-project").addEventListener("click", deleteProject);
 requirementsEl.addEventListener("input", updateStartButton);
+requirementsFileEl.addEventListener("change", updateStartButton);
 startButton.addEventListener("click", startProject);
 
 updateStartButton();
