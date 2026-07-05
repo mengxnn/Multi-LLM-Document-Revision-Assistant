@@ -383,10 +383,10 @@ def _save_upload_file(
         return None
     filename = Path(upload.filename).name
     suffix = Path(filename).suffix.lower()
-    if suffix not in {".docx", ".md", ".txt"}:
+    if suffix not in {".docx", ".md", ".pdf", ".txt"}:
         raise HTTPException(
             status_code=400,
-            detail=f"{field_name} must be a .docx, .md, or .txt file",
+            detail=f"{field_name} must be a .docx, .md, .pdf, or .txt file",
         )
     upload_dir.mkdir(parents=True, exist_ok=True)
     safe_name = _safe_upload_name(filename, fallback=f"upload{suffix}")

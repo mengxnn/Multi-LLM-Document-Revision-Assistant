@@ -379,6 +379,29 @@ class WebApiEndpointTests(TestCase):
         self.assertEqual(Path(request.source_path).suffix, ".txt")
         self.assertEqual(Path(request.meeting_notes_path).suffix, ".md")
 
+    def test_start_project_upload_endpoint_accepts_pdf_files(self):
+        fake_app = FakeWebApplication()
+        with TemporaryDirectory() as temp_dir:
+            client = TestClient(
+                create_app(
+                    application=fake_app,
+                    run_store=InMemoryRunStore(),
+                    run_synchronously=True,
+                    projects_root=Path(temp_dir) / "projects",
+                )
+            )
+
+            response = client.post(
+                "/api/projects/start-upload",
+                data={"requirements_text": "Improve it.", "cycles": "1", "dry_run": "true"},
+                files={
+                    "source_file": ("source.pdf", b"%PDF-1.4\n%%EOF\n", "application/pdf"),
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Path(fake_app.received_start_request.source_path).suffix, ".pdf")
+
     def test_start_project_upload_endpoint_rejects_unsupported_files_and_cleans_uploads(self):
         with TemporaryDirectory() as temp_dir:
             projects_root = Path(temp_dir) / "projects"

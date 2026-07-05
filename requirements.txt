@@ -1,6 +1,7 @@
 autogen-agentchat
 autogen-ext[openai]
 python-docx
+pypdf
 fastapi
 uvicorn
 python-multipart

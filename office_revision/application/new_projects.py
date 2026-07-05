@@ -83,9 +83,11 @@ class NewProjectService:
         self._write_snapshots(
             context.inputs_dir,
             requirements=requirements,
+            requirements_path=Path(request.requirements_path) if request.requirements_path else None,
             source_text=source_text,
             source_path=source_path,
             meeting_notes=meeting_notes,
+            meeting_notes_path=Path(request.meeting_notes_path) if request.meeting_notes_path else None,
         )
         write_project_metadata(context)
         ensure_feedback_template(context.inputs_dir)
@@ -236,8 +238,8 @@ class NewProjectService:
             raise RevisionApplicationError("summary_mode must be rule or llm")
         if request.project_title_language not in {"auto", "zh", "en"}:
             raise RevisionApplicationError("project_title_language must be auto, zh, or en")
-        if request.source_path and Path(request.source_path).suffix.lower() not in {".docx", ".md", ".txt"}:
-            raise RevisionApplicationError("source must be a .docx, .md, or .txt file")
+        if request.source_path and Path(request.source_path).suffix.lower() not in {".docx", ".md", ".pdf", ".txt"}:
+            raise RevisionApplicationError("source must be a .docx, .md, .pdf, or .txt file")
 
     @staticmethod
     def _read_value(path, text, label, *, required):
@@ -245,7 +247,10 @@ class NewProjectService:
             path = Path(path)
             if not path.exists():
                 raise RevisionApplicationError(f"{label} file not found: {path}")
-            value = read_source_text(path).strip()
+            try:
+                value = read_source_text(path).strip()
+            except ValueError as exc:
+                raise RevisionApplicationError(f"{label} file cannot be read: {exc}") from exc
             resolved_path = path
         else:
             value = (text or "").strip()
@@ -255,16 +260,31 @@ class NewProjectService:
         return value, resolved_path
 
     @staticmethod
-    def _write_snapshots(inputs_dir, *, requirements, source_text, source_path, meeting_notes):
+    def _write_snapshots(
+        inputs_dir,
+        *,
+        requirements,
+        requirements_path,
+        source_text,
+        source_path,
+        meeting_notes,
+        meeting_notes_path,
+    ):
         inputs_dir.mkdir(parents=True, exist_ok=True)
         (inputs_dir / "requirements.md").write_text(requirements, encoding="utf-8")
+        if requirements_path and requirements_path.suffix.lower() == ".pdf":
+            shutil.copy2(requirements_path, inputs_dir / "requirements.pdf")
         if source_text:
             if source_path:
                 shutil.copy2(source_path, inputs_dir / f"source{source_path.suffix.lower()}")
+                if source_path.suffix.lower() == ".pdf":
+                    (inputs_dir / "source_extracted.md").write_text(source_text, encoding="utf-8")
             else:
                 (inputs_dir / "source.md").write_text(source_text, encoding="utf-8")
         if meeting_notes:
             (inputs_dir / "meeting_notes.md").write_text(meeting_notes, encoding="utf-8")
+            if meeting_notes_path and meeting_notes_path.suffix.lower() == ".pdf":
+                shutil.copy2(meeting_notes_path, inputs_dir / "meeting_notes.pdf")
 
     @staticmethod
     def _cleanup_failed_project(context) -> None:

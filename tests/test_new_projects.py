@@ -11,7 +11,103 @@ from office_revision.application import (
 from office_revision.application.new_projects import NewProjectService
 
 
+def write_text_pdf(path: Path, text: str) -> None:
+    stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode("ascii")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream",
+    ]
+    output = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for index, body in enumerate(objects, start=1):
+        offsets.append(len(output))
+        output.extend(f"{index} 0 obj\n".encode("ascii"))
+        output.extend(body)
+        output.extend(b"\nendobj\n")
+    xref_offset = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    output.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        output.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    output.extend(
+        f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_offset}\n%%EOF\n".encode("ascii")
+    )
+    path.write_bytes(output)
+
+
+def write_blank_pdf(path: Path) -> None:
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    with path.open("wb") as output:
+        writer.write(output)
+
+
 class NewProjectTests(unittest.TestCase):
+    def test_uploaded_pdf_requirements_keeps_original_and_extracted_text(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            requirements = root / "requirements.pdf"
+            write_text_pdf(requirements, "PDF requirements body")
+
+            result = RevisionApplication(projects_root=root / "projects").start_new_project(
+                StartProjectRequest(
+                    requirements_path=str(requirements),
+                    cycles=1,
+                    dry_run=True,
+                )
+            )
+
+            self.assertTrue((result.project_path / "inputs" / "requirements.pdf").exists())
+            self.assertIn(
+                "PDF requirements body",
+                (result.project_path / "inputs" / "requirements.md").read_text(encoding="utf-8"),
+            )
+
+    def test_image_only_pdf_fails_before_project_creation(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "scanned.pdf"
+            write_blank_pdf(source)
+
+            with self.assertRaisesRegex(RevisionApplicationError, "image-only"):
+                RevisionApplication(projects_root=root / "projects").start_new_project(
+                    StartProjectRequest(
+                        requirements_text="Improve it.",
+                        source_path=str(source),
+                        cycles=1,
+                        dry_run=True,
+                    )
+                )
+
+            self.assertFalse((root / "projects").exists())
+
+    def test_uploaded_pdf_source_keeps_original_and_extracted_text(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "draft.pdf"
+            write_text_pdf(source, "PDF draft body")
+
+            result = RevisionApplication(projects_root=root / "projects").start_new_project(
+                StartProjectRequest(
+                    requirements_text="Improve it.",
+                    source_path=str(source),
+                    cycles=1,
+                    dry_run=True,
+                )
+            )
+
+            self.assertTrue((result.project_path / "inputs" / "source.pdf").exists())
+            extracted = result.project_path / "inputs" / "source_extracted.md"
+            self.assertTrue(extracted.exists())
+            self.assertIn("PDF draft body", extracted.read_text(encoding="utf-8"))
+
     def test_uploaded_markdown_source_keeps_source_type_and_writes_docx(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

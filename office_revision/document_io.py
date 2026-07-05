@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from docx import Document
+from pypdf import PdfReader
 
 
 HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+)$")
@@ -16,6 +17,8 @@ def read_source_text(path: str | Path) -> str:
         return source_path.read_text(encoding="utf-8")
     if suffix == ".docx":
         return read_docx_text(source_path)
+    if suffix == ".pdf":
+        return read_pdf_text(source_path)
     if suffix == ".doc":
         raise ValueError(".doc is not supported yet. Please convert it to .docx first.")
     raise ValueError(f"Unsupported source file type: {source_path.suffix}")
@@ -42,6 +45,18 @@ def read_docx_text(path: str | Path) -> str:
                 blocks.append("| " + " | ".join(cells) + " |")
 
     return "\n\n".join(blocks)
+
+
+def read_pdf_text(path: str | Path) -> str:
+    reader = PdfReader(str(path))
+    pages: list[str] = []
+    for index, page in enumerate(reader.pages, start=1):
+        text = (page.extract_text() or "").strip()
+        if text:
+            pages.append(f"<!-- page {index} -->\n\n{text}")
+    if not pages:
+        raise ValueError("No text could be extracted from this PDF. It may be scanned or image-only.")
+    return "\n\n".join(pages)
 
 
 def write_final_docx(text: str, output_path: str | Path, reference_path: str | Path | None = None) -> None:

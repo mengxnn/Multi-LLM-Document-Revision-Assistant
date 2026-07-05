@@ -87,7 +87,7 @@ class WebStaticTests(TestCase):
         self.assertIn('id="requirements-file"', response.text)
         self.assertIn('id="source-file"', response.text)
         self.assertIn('id="meeting-notes-file"', response.text)
-        self.assertIn('accept=".docx,.md,.txt"', response.text)
+        self.assertIn('accept=".docx,.md,.pdf,.txt"', response.text)
 
     def test_start_project_javascript_submits_multipart_form_data(self):
         client = TestClient(create_app())
