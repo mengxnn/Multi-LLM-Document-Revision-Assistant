@@ -16,6 +16,7 @@ const runEventsEl = document.querySelector("#run-events");
 const connectionStatusEl = document.querySelector("#connection-status");
 let selectedProjectId = null;
 let selectedBaseVersionPath = null;
+let selectedBaseVersionName = null;
 let editingProfileId = null;
 
 function setText(element, text) {
@@ -174,6 +175,7 @@ async function loadProjects() {
   projectActionsEl.hidden = true;
   selectedProjectId = null;
   selectedBaseVersionPath = null;
+  selectedBaseVersionName = null;
   try {
     const payload = await requestJson("/api/projects");
     for (const project of payload.projects) {
@@ -197,6 +199,7 @@ async function loadProjectDetail(projectId) {
     const detail = await requestJson(`/api/projects/${projectId}`);
     selectedProjectId = projectId;
     selectedBaseVersionPath = null;
+    selectedBaseVersionName = null;
     projectActionsEl.hidden = false;
     renderProjectDetail(detail);
     updateProjectDetailButtons();
@@ -210,6 +213,7 @@ function clearProjectSelection() {
   projectActionsEl.hidden = true;
   selectedProjectId = null;
   selectedBaseVersionPath = null;
+  selectedBaseVersionName = null;
   updateProjectDetailButtons();
 }
 
@@ -357,6 +361,7 @@ function createBaseVersionButton(version) {
 
 function chooseBaseVersion(version) {
   selectedBaseVersionPath = version.path;
+  selectedBaseVersionName = version.name;
   setText(runStatusEl, `继续基准：${version.name}`);
 }
 
@@ -392,6 +397,10 @@ async function continueProject() {
     return;
   }
   try {
+    if (!confirmContinueProject()) {
+      setText(runStatusEl, "已取消继续修改");
+      return;
+    }
     const payload = await requestJson(`/api/projects/${selectedProjectId}/continue`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -408,6 +417,30 @@ async function continueProject() {
   } catch (error) {
     setText(runStatusEl, error.message);
   }
+}
+
+function buildContinuePreview() {
+  const feedback = document.querySelector("#continue-feedback-text").value.trim();
+  const cycles = Number(document.querySelector("#continue-cycles").value || 2);
+  const dryRun = document.querySelector("#continue-dry-run").checked;
+  const baseVersion = selectedBaseVersionName || "最新版本";
+  return [
+    "请确认本次继续修改设置：",
+    "",
+    `继续项目：${selectedProjectId || "未选择"}`,
+    `基准版本：${baseVersion}`,
+    `反馈内容：${feedback ? "已填写" : "未填写"}`,
+    `运行模式：${dryRun ? "dry-run 测试" : "真实模型"}`,
+    `循环次数：${cycles}`,
+    `writer 配置：${activeWriterProfileEl.textContent || "未加载"}`,
+    `reviewer 配置：${activeReviewerProfileEl.textContent || "未加载"}`,
+    "",
+    "确认开始继续修改？"
+  ].join("\n");
+}
+
+function confirmContinueProject() {
+  return window.confirm(buildContinuePreview());
 }
 
 async function deleteProject() {
