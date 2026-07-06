@@ -22,6 +22,7 @@ from office_revision.application.contracts import (
     ModelProfile,
     ModelProfileRequest,
     ProgressEvent,
+    InputSummary,
     ProjectDetail,
     ProjectSummary,
     RevisionRunResult,
@@ -131,6 +132,15 @@ class FakeWebApplication:
                 ),
             ),
             inputs={"requirements": Path("projects/demo_20260627/inputs/requirements.md")},
+            input_summaries={
+                "requirements": InputSummary(
+                    name="requirements",
+                    kind="md",
+                    size_bytes=128,
+                    extracted_chars=80,
+                    warnings=("long",),
+                )
+            },
         )
 
     def list_model_profiles(self):
@@ -282,6 +292,8 @@ class WebApiEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["summary"]["project_id"], "demo_20260627")
         self.assertEqual(response.json()["versions"][0]["artifacts"]["final_md"], "projects/demo_20260627/latest/final_draft/final.md")
+        self.assertEqual(response.json()["input_summaries"]["requirements"]["kind"], "md")
+        self.assertEqual(response.json()["input_summaries"]["requirements"]["warnings"], ["long"])
 
     def test_list_model_profiles_endpoint(self):
         client = TestClient(create_app(application=FakeWebApplication()))

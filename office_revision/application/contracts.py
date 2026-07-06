@@ -39,10 +39,20 @@ class ProjectSummary:
 
 
 @dataclass(frozen=True)
+class InputSummary:
+    name: str
+    kind: str
+    size_bytes: int
+    extracted_chars: int
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ProjectDetail:
     summary: ProjectSummary
     versions: tuple[VersionSummary, ...]
     inputs: dict[str, Path]
+    input_summaries: dict[str, InputSummary] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

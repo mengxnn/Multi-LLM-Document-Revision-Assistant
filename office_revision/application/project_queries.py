@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ..input_inspection import load_input_summaries
 from ..project_paths import read_manifest, status_from_dir, version_number_from_dir
 from .contracts import ArtifactLinks, ProjectDetail, ProjectSummary, VersionSummary
 
@@ -54,7 +55,12 @@ class ProjectQueryService:
             for path in inputs_dir.iterdir()
             if inputs_dir.exists() and path.is_file()
         } if inputs_dir.exists() else {}
-        return ProjectDetail(summary=summary, versions=tuple(versions), inputs=inputs)
+        return ProjectDetail(
+            summary=summary,
+            versions=tuple(versions),
+            inputs=inputs,
+            input_summaries=load_input_summaries(project_dir),
+        )
 
     def resolve_project(self, project: str | Path) -> Path:
         candidate = Path(project)

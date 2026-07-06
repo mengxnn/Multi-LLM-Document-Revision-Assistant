@@ -108,6 +108,30 @@ function inputDisplayLabel(name) {
   return name;
 }
 
+function formatBytes(size) {
+  const value = Number(size || 0);
+  if (value >= 1024 * 1024) {
+    return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  }
+  if (value >= 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  return `${value} B`;
+}
+
+function warningText(code) {
+  if (code === "empty") {
+    return "提取文本为空";
+  }
+  if (code === "long") {
+    return "内容较长，可能增加耗时或占用更多上下文";
+  }
+  if (code === "very_long") {
+    return "内容很长，后续建议分段处理";
+  }
+  return code;
+}
+
 function showView(name) {
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.toggle("is-active", tab.dataset.view === name);
@@ -244,9 +268,29 @@ function renderProjectDetail(detail) {
     inputs.appendChild(createTextElement("strong", null, "输入文件"));
     for (const name of inputNames) {
       inputs.appendChild(createPathLine(inputDisplayLabel(name), detail.inputs[name], inputDisplayPath));
+      const summary = detail.input_summaries ? detail.input_summaries[name] : null;
+      if (summary) {
+        inputs.appendChild(renderInputSummary(summary));
+      }
     }
     projectDetailEl.appendChild(inputs);
   }
+}
+
+function renderInputSummary(summary) {
+  const element = document.createElement("div");
+  element.className = "input-summary";
+  const parts = [
+    `类型 ${summary.kind || "-"}`,
+    `大小 ${formatBytes(summary.size_bytes)}`,
+    `提取 ${summary.extracted_chars || 0} 字符`
+  ];
+  element.appendChild(createTextElement("span", null, parts.join(" | ")));
+  const warnings = Array.isArray(summary.warnings) ? summary.warnings : [];
+  for (const warning of warnings) {
+    element.appendChild(createTextElement("span", "input-warning", warningText(warning)));
+  }
+  return element;
 }
 
 function renderVersionArtifacts(artifacts) {

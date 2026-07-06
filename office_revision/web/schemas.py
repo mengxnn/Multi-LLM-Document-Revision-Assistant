@@ -8,6 +8,7 @@ from office_revision.application.contracts import (
     ArtifactLinks,
     DecisionOutcome,
     DeleteProjectResult,
+    InputSummary,
     ModelConnectionStatus,
     ModelProfile,
     ProgressEvent,
@@ -64,11 +65,25 @@ def version_summary_to_dict(version: VersionSummary) -> dict[str, Any]:
     }
 
 
+def input_summary_to_dict(summary: InputSummary) -> dict[str, Any]:
+    return {
+        "name": summary.name,
+        "kind": summary.kind,
+        "size_bytes": summary.size_bytes,
+        "extracted_chars": summary.extracted_chars,
+        "warnings": list(summary.warnings),
+    }
+
+
 def project_detail_to_dict(detail: ProjectDetail) -> dict[str, Any]:
     return {
         "summary": project_summary_to_dict(detail.summary),
         "versions": [version_summary_to_dict(version) for version in detail.versions],
         "inputs": {name: path_to_string(path) for name, path in detail.inputs.items()},
+        "input_summaries": {
+            name: input_summary_to_dict(summary)
+            for name, summary in detail.input_summaries.items()
+        },
     }
 
 

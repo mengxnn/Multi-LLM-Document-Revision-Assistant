@@ -120,6 +120,19 @@ class WebStaticTests(TestCase):
         self.assertIn("inputDisplayLabel", response.text)
         self.assertIn("PDF提取文本", response.text)
 
+    def test_project_inputs_render_file_summaries(self):
+        client = TestClient(create_app())
+
+        script = client.get("/static/app.js")
+        styles = client.get("/static/styles.css")
+
+        self.assertEqual(script.status_code, 200)
+        self.assertEqual(styles.status_code, 200)
+        self.assertIn("renderInputSummary", script.text)
+        self.assertIn("input_summaries", script.text)
+        self.assertIn("input-summary", styles.text)
+        self.assertIn("input-warning", styles.text)
+
     def test_project_detail_can_be_collapsed_from_javascript(self):
         client = TestClient(create_app())
 

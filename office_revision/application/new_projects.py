@@ -10,6 +10,7 @@ from ..autogen_runner import generate_llm_project_title, run_autogen_revision_lo
 from ..continue_flow import ensure_feedback_template
 from ..document_io import read_source_text
 from ..dry_run import dry_run_reviewer, dry_run_writer
+from ..input_inspection import write_input_summaries
 from ..project_manager import (
     create_project_context,
     fallback_project_title,
@@ -91,6 +92,7 @@ class NewProjectService:
         )
         write_project_metadata(context)
         ensure_feedback_template(context.inputs_dir)
+        write_input_summaries(context.project_dir)
 
         writer_settings, reviewer_settings = self._settings(request)
         workflow_request = RevisionRequest(

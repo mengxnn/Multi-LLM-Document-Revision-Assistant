@@ -132,6 +132,29 @@ class NewProjectTests(unittest.TestCase):
             self.assertTrue((result.version_path / "final_draft" / "final.docx").exists())
             self.assertTrue((result.project_path / "inputs" / "source.md").exists())
 
+    def test_start_project_writes_input_summaries_for_saved_inputs(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            long_source = "source " * 5000
+
+            result = RevisionApplication(projects_root=root / "projects").start_new_project(
+                StartProjectRequest(
+                    requirements_text="Improve it.",
+                    source_text=long_source,
+                    cycles=1,
+                    dry_run=True,
+                )
+            )
+
+            summaries = json.loads(
+                (result.project_path / "metadata" / "input_summaries.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(summaries["requirements.md"]["kind"], "md")
+            self.assertGreater(summaries["source.md"]["extracted_chars"], 20000)
+            self.assertIn("long", summaries["source.md"]["warnings"])
+
     def test_starts_dry_run_project_from_pasted_inputs(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "projects"

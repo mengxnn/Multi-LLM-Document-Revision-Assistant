@@ -7,6 +7,7 @@ from office_revision.application import (
     ArtifactLinks,
     ContinueRevisionRequest,
     DeleteProjectResult,
+    InputSummary,
     ModelProfileRequest,
     ProgressEvent,
     RevisionApplication,
@@ -155,6 +156,16 @@ class ApplicationServiceTests(unittest.TestCase):
             self.assertEqual(len(detail.versions), 1)
             self.assertTrue(detail.versions[0].is_latest)
             self.assertEqual(detail.versions[0].artifacts.final_md, layout.final_md)
+            self.assertEqual(
+                detail.input_summaries["requirements.md"],
+                InputSummary(
+                    name="requirements.md",
+                    kind="md",
+                    size_bytes=len("requirements".encode("utf-8")),
+                    extracted_chars=len("requirements"),
+                    warnings=(),
+                ),
+            )
 
     def test_apply_decision_updates_latest_version(self):
         with tempfile.TemporaryDirectory() as temp_dir:
