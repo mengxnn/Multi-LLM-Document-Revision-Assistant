@@ -478,6 +478,37 @@ function updateStartButton() {
   startButton.disabled = requirementsEl.value.trim().length === 0 && requirementsFileEl.files.length === 0;
 }
 
+function inputSourceLabel(textElement, fileElement) {
+  if (fileElement.files.length > 0) {
+    return `文件：${fileElement.files[0].name}`;
+  }
+  return textElement.value.trim() ? "手动输入" : "未提供";
+}
+
+function buildStartPreview() {
+  const sourceTextEl = document.querySelector("#source-text");
+  const meetingNotesTextEl = document.querySelector("#meeting-notes-text");
+  const cycles = Number(document.querySelector("#cycles").value || 2);
+  const dryRun = document.querySelector("#dry-run").checked;
+  return [
+    "请确认本次运行设置：",
+    "",
+    `运行模式：${dryRun ? "dry-run 测试" : "真实模型"}`,
+    `循环次数：${cycles}`,
+    `修改要求：${inputSourceLabel(requirementsEl, requirementsFileEl)}`,
+    `初稿：${inputSourceLabel(sourceTextEl, sourceFileEl)}`,
+    `会议纪要：${inputSourceLabel(meetingNotesTextEl, meetingNotesFileEl)}`,
+    `writer 配置：${activeWriterProfileEl.textContent || "未加载"}`,
+    `reviewer 配置：${activeReviewerProfileEl.textContent || "未加载"}`,
+    "",
+    "确认开始运行？"
+  ].join("\n");
+}
+
+function confirmStartProject() {
+  return window.confirm(buildStartPreview());
+}
+
 async function pollRun(runId) {
   try {
     const payload = await requestJson(`/api/runs/${runId}`);
@@ -500,6 +531,10 @@ async function pollRun(runId) {
 
 async function startProject() {
   try {
+    if (!confirmStartProject()) {
+      setText(runStatusEl, "已取消运行");
+      return;
+    }
     const formData = new FormData();
     appendTextOrFile(formData, "requirements_text", requirementsEl, "requirements_file", requirementsFileEl);
     appendTextOrFile(formData, "source_text", document.querySelector("#source-text"), "source_file", sourceFileEl);

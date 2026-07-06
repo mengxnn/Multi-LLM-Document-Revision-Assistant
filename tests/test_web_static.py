@@ -101,6 +101,21 @@ class WebStaticTests(TestCase):
         self.assertIn("source_file", response.text)
         self.assertIn("meeting_notes_file", response.text)
 
+    def test_start_project_javascript_confirms_run_preview_before_submit(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("confirmStartProject", response.text)
+        self.assertIn("buildStartPreview", response.text)
+        self.assertIn("window.confirm", response.text)
+        self.assertIn("运行模式", response.text)
+        self.assertIn("循环次数", response.text)
+        self.assertIn("修改要求", response.text)
+        self.assertIn("writer 配置", response.text)
+        self.assertIn("reviewer 配置", response.text)
+
     def test_project_versions_render_artifacts_in_collapsible_details(self):
         client = TestClient(create_app())
 
