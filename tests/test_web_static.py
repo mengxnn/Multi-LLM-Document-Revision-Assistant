@@ -101,6 +101,25 @@ class WebStaticTests(TestCase):
         self.assertIn("source_file", response.text)
         self.assertIn("meeting_notes_file", response.text)
 
+    def test_project_versions_render_artifacts_in_collapsible_details(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('document.createElement("details")', response.text)
+        self.assertIn("version-artifacts", response.text)
+        self.assertIn("版本详情", response.text)
+
+    def test_project_inputs_label_pdf_extracted_text(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("inputDisplayLabel", response.text)
+        self.assertIn("PDF提取文本", response.text)
+
     def test_project_detail_can_be_collapsed_from_javascript(self):
         client = TestClient(create_app())
 

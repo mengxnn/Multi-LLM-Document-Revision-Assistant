@@ -89,6 +89,25 @@ function inputDisplayPath(path) {
   return display;
 }
 
+function inputDisplayLabel(name) {
+  if (name === "source_extracted.md") {
+    return "初稿PDF提取文本";
+  }
+  if (name === "requirements.md") {
+    return "修改要求";
+  }
+  if (name === "requirements.pdf") {
+    return "修改要求PDF原文";
+  }
+  if (name === "source.pdf") {
+    return "初稿PDF原文";
+  }
+  if (name === "meeting_notes.pdf") {
+    return "会议纪要PDF原文";
+  }
+  return name;
+}
+
 function showView(name) {
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.toggle("is-active", tab.dataset.view === name);
@@ -214,7 +233,7 @@ function renderProjectDetail(detail) {
       actions.appendChild(createOpenButton(version.path, "reveal", "打开版本目录"));
       card.appendChild(actions);
     }
-    card.appendChild(renderArtifacts(version.artifacts));
+    card.appendChild(renderVersionArtifacts(version.artifacts));
     projectDetailEl.appendChild(card);
   }
 
@@ -224,10 +243,18 @@ function renderProjectDetail(detail) {
     inputs.className = "artifact-list";
     inputs.appendChild(createTextElement("strong", null, "输入文件"));
     for (const name of inputNames) {
-      inputs.appendChild(createPathLine(name, detail.inputs[name], inputDisplayPath));
+      inputs.appendChild(createPathLine(inputDisplayLabel(name), detail.inputs[name], inputDisplayPath));
     }
     projectDetailEl.appendChild(inputs);
   }
+}
+
+function renderVersionArtifacts(artifacts) {
+  const details = document.createElement("details");
+  details.className = "version-artifacts";
+  details.appendChild(createTextElement("summary", null, "版本详情"));
+  details.appendChild(renderArtifacts(artifacts));
+  return details;
 }
 
 function renderArtifacts(artifacts) {

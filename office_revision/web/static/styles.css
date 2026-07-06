@@ -149,6 +149,15 @@ h2 {
   padding: 12px;
 }
 
+.version-artifacts {
+  margin-top: 8px;
+}
+
+.version-artifacts summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
 .artifact-list {
   display: grid;
   gap: 4px;
