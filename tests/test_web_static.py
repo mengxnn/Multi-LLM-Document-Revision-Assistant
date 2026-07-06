@@ -74,9 +74,22 @@ class WebStaticTests(TestCase):
         response = client.get("/")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn('id="project-search"', response.text)
+        self.assertIn("搜索项目", response.text)
         self.assertIn("continue-feedback-text", response.text)
         self.assertIn("continue-project", response.text)
         self.assertIn("delete-permanent", response.text)
+
+    def test_project_search_filters_loaded_projects_in_javascript(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("projectSearchEl", response.text)
+        self.assertIn("renderProjectList", response.text)
+        self.assertIn("projectMatchesSearch", response.text)
+        self.assertIn("没有匹配项目", response.text)
 
     def test_new_project_form_accepts_source_requirement_and_meeting_files(self):
         client = TestClient(create_app())

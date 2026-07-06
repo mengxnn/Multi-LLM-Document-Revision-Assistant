@@ -233,6 +233,12 @@ input {
   margin: 0;
 }
 
+.project-search {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
 .form-row label {
   margin: 0;
 }

@@ -1,4 +1,5 @@
 const projectsEl = document.querySelector("#projects");
+const projectSearchEl = document.querySelector("#project-search");
 const projectDetailEl = document.querySelector("#project-detail");
 const projectActionsEl = document.querySelector("#project-actions");
 const profilesEl = document.querySelector("#profiles");
@@ -14,6 +15,7 @@ const startButton = document.querySelector("#start-project");
 const runStatusEl = document.querySelector("#run-status");
 const runEventsEl = document.querySelector("#run-events");
 const connectionStatusEl = document.querySelector("#connection-status");
+let loadedProjects = [];
 let selectedProjectId = null;
 let selectedBaseVersionPath = null;
 let selectedBaseVersionName = null;
@@ -169,8 +171,37 @@ function renderProject(project) {
   return item;
 }
 
-async function loadProjects() {
+function projectMatchesSearch(project, query) {
+  if (!query) {
+    return true;
+  }
+  const searchable = [
+    project.title,
+    project.project_id,
+    project.created_date,
+    project.latest_status,
+    project.latest_mode,
+    project.latest_version ? `v${project.latest_version}` : ""
+  ].filter(Boolean).join(" ").toLowerCase();
+  return searchable.includes(query.toLowerCase());
+}
+
+function renderProjectList() {
   projectsEl.innerHTML = "";
+  const query = projectSearchEl.value.trim();
+  const projects = loadedProjects.filter((project) => projectMatchesSearch(project, query));
+  for (const project of projects) {
+    projectsEl.appendChild(renderProject(project));
+  }
+  updateProjectDetailButtons();
+  if (loadedProjects.length === 0) {
+    projectsEl.textContent = "暂无项目";
+  } else if (projects.length === 0) {
+    projectsEl.textContent = "没有匹配项目";
+  }
+}
+
+async function loadProjects() {
   projectDetailEl.innerHTML = '<div class="empty-state">请选择一个项目查看详情。</div>';
   projectActionsEl.hidden = true;
   selectedProjectId = null;
@@ -178,13 +209,8 @@ async function loadProjects() {
   selectedBaseVersionName = null;
   try {
     const payload = await requestJson("/api/projects");
-    for (const project of payload.projects) {
-      projectsEl.appendChild(renderProject(project));
-    }
-    updateProjectDetailButtons();
-    if (payload.projects.length === 0) {
-      projectsEl.textContent = "暂无项目";
-    }
+    loadedProjects = payload.projects;
+    renderProjectList();
   } catch (error) {
     projectsEl.textContent = error.message;
   }
@@ -768,6 +794,7 @@ document.querySelector("#decision-continue").addEventListener("click", () => app
 document.querySelector("#decision-skip").addEventListener("click", () => applyDecision(selectedProjectId, "skip"));
 document.querySelector("#decision-abandon").addEventListener("click", () => applyDecision(selectedProjectId, "abandon"));
 document.querySelector("#delete-project").addEventListener("click", deleteProject);
+projectSearchEl.addEventListener("input", renderProjectList);
 requirementsEl.addEventListener("input", updateStartButton);
 requirementsFileEl.addEventListener("change", updateStartButton);
 startButton.addEventListener("click", startProject);
