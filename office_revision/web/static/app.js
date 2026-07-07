@@ -1,5 +1,6 @@
 const projectsEl = document.querySelector("#projects");
 const projectSearchEl = document.querySelector("#project-search");
+const projectSortEl = document.querySelector("#project-sort");
 const projectDetailEl = document.querySelector("#project-detail");
 const projectActionsEl = document.querySelector("#project-actions");
 const profilesEl = document.querySelector("#profiles");
@@ -186,10 +187,31 @@ function projectMatchesSearch(project, query) {
   return searchable.includes(query.toLowerCase());
 }
 
+function projectSortKey(project) {
+  return `${project.created_date || ""} ${project.project_id || ""}`;
+}
+
+function sortProjects(projects) {
+  const mode = projectSortEl.value;
+  return [...projects].sort((left, right) => {
+    if (mode === "oldest") {
+      return projectSortKey(left).localeCompare(projectSortKey(right), "zh-Hans");
+    }
+    if (mode === "name") {
+      const leftName = left.title || left.project_id || "";
+      const rightName = right.title || right.project_id || "";
+      return leftName.localeCompare(rightName, "zh-Hans");
+    }
+    return projectSortKey(right).localeCompare(projectSortKey(left), "zh-Hans");
+  });
+}
+
 function renderProjectList() {
   projectsEl.innerHTML = "";
   const query = projectSearchEl.value.trim();
-  const projects = loadedProjects.filter((project) => projectMatchesSearch(project, query));
+  const projects = sortProjects(
+    loadedProjects.filter((project) => projectMatchesSearch(project, query))
+  );
   for (const project of projects) {
     projectsEl.appendChild(renderProject(project));
   }
@@ -795,6 +817,7 @@ document.querySelector("#decision-skip").addEventListener("click", () => applyDe
 document.querySelector("#decision-abandon").addEventListener("click", () => applyDecision(selectedProjectId, "abandon"));
 document.querySelector("#delete-project").addEventListener("click", deleteProject);
 projectSearchEl.addEventListener("input", renderProjectList);
+projectSortEl.addEventListener("change", renderProjectList);
 requirementsEl.addEventListener("input", updateStartButton);
 requirementsFileEl.addEventListener("change", updateStartButton);
 startButton.addEventListener("click", startProject);

@@ -233,7 +233,8 @@ input {
   margin: 0;
 }
 
-.project-search {
+.project-search,
+.project-sort {
   display: grid;
   gap: 6px;
   margin: 0 0 12px;

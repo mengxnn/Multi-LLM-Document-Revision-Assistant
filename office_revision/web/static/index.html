@@ -32,6 +32,14 @@
             <span>搜索项目</span>
             <input id="project-search" placeholder="输入项目名、ID、状态或模式">
           </label>
+          <label class="project-sort" for="project-sort">
+            <span>排序</span>
+            <select id="project-sort">
+              <option value="latest">最新优先</option>
+              <option value="oldest">旧项目优先</option>
+              <option value="name">项目名</option>
+            </select>
+          </label>
           <div id="projects" class="list"></div>
           <section id="project-detail" class="detail project-detail">
             <div class="empty-state">请选择一个项目查看详情。</div>
