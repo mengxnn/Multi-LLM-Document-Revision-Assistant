@@ -171,6 +171,18 @@ class WebStaticTests(TestCase):
         self.assertIn("version-artifacts", response.text)
         self.assertIn("版本详情", response.text)
 
+    def test_project_versions_render_run_summary(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("renderRunSummary", response.text)
+        self.assertIn("run_summary", response.text)
+        self.assertIn("requested_cycles", response.text)
+        self.assertIn("actual_cycles", response.text)
+        self.assertIn("运行摘要", response.text)
+
     def test_project_inputs_label_pdf_extracted_text(self):
         client = TestClient(create_app())
 

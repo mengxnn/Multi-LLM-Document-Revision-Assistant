@@ -302,6 +302,10 @@ function renderProjectDetail(detail) {
     );
     const versionMeta = createTextElement("div", "item-meta", shortPath(version.path));
     card.appendChild(versionMeta);
+    const runSummary = renderRunSummary(version.run_summary);
+    if (runSummary) {
+      card.appendChild(runSummary);
+    }
     if (version.path) {
       const actions = document.createElement("div");
       actions.className = "actions path-actions";
@@ -343,6 +347,31 @@ function renderInputSummary(summary) {
     element.appendChild(createTextElement("span", "input-warning", warningText(warning)));
   }
   return element;
+}
+
+function renderRunSummary(summary) {
+  if (!summary) {
+    return null;
+  }
+  const parts = [];
+  if (summary.actual_cycles !== null && summary.actual_cycles !== undefined) {
+    const requested = summary.requested_cycles ?? "-";
+    parts.push(`轮数 ${summary.actual_cycles}/${requested}`);
+  } else if (summary.requested_cycles !== null && summary.requested_cycles !== undefined) {
+    parts.push(`请求 ${summary.requested_cycles} 轮`);
+  }
+  if (summary.stopped_early === true) {
+    parts.push("提前停止");
+  } else if (summary.stopped_early === false) {
+    parts.push("未提前停止");
+  }
+  if (summary.stop_reason) {
+    parts.push(`原因 ${summary.stop_reason}`);
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  return createTextElement("div", "run-summary", `运行摘要：${parts.join(" | ")}`);
 }
 
 function renderVersionArtifacts(artifacts) {

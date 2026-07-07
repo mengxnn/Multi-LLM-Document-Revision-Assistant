@@ -13,6 +13,7 @@ from .contracts import (
     ProgressEvent,
     RevisionApplicationError,
     RevisionRunResult,
+    RunSummary,
     StartProjectRequest,
     VersionSummary,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "RevisionApplicationError",
     "RevisionRunResult",
     "RevisionApplication",
+    "RunSummary",
     "StartProjectRequest",
     "VersionSummary",
 ]

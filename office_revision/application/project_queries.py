@@ -6,7 +6,7 @@ from typing import Any
 
 from ..input_inspection import load_input_summaries
 from ..project_paths import read_manifest, status_from_dir, version_number_from_dir
-from .contracts import ArtifactLinks, ProjectDetail, ProjectSummary, VersionSummary
+from .contracts import ArtifactLinks, ProjectDetail, ProjectSummary, RunSummary, VersionSummary
 
 
 ARTIFACT_KEYS = (
@@ -110,6 +110,7 @@ def _version_summary(version_dir: Path, *, mode: str, latest: dict[str, Any]) ->
             and latest.get("output_root") == version_dir.parent.name
         ),
         artifacts=ArtifactLinks(**artifact_values),
+        run_summary=_run_summary_from_log(artifact_values.get("run_log")),
     )
 
 
@@ -128,6 +129,39 @@ def _optional_int(value: Any) -> int | None:
         return int(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _optional_bool(value: Any) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _run_summary_from_log(path: Path | None) -> RunSummary | None:
+    if path is None:
+        return None
+    data = _read_json(path)
+    if not data:
+        return None
+    summary = RunSummary(
+        requested_cycles=_optional_int(data.get("requested_cycles", data.get("cycles"))),
+        actual_cycles=_optional_int(data.get("actual_cycles")),
+        stopped_early=_optional_bool(data.get("stopped_early")),
+        stop_reason=_optional_str(data.get("stop_reason")),
+    )
+    if (
+        summary.requested_cycles is None
+        and summary.actual_cycles is None
+        and summary.stopped_early is None
+        and summary.stop_reason is None
+    ):
+        return None
+    return summary
 
 
 def _latest_mode(latest: dict[str, Any]) -> str:

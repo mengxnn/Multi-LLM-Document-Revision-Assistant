@@ -16,6 +16,14 @@ class ArtifactLinks:
 
 
 @dataclass(frozen=True)
+class RunSummary:
+    requested_cycles: int | None = None
+    actual_cycles: int | None = None
+    stopped_early: bool | None = None
+    stop_reason: str | None = None
+
+
+@dataclass(frozen=True)
 class VersionSummary:
     name: str
     version: int | None
@@ -25,6 +33,7 @@ class VersionSummary:
     path: Path
     is_latest: bool
     artifacts: ArtifactLinks = field(default_factory=ArtifactLinks)
+    run_summary: RunSummary | None = None
 
 
 @dataclass(frozen=True)

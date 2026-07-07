@@ -115,6 +115,7 @@ h2 {
 .item-meta,
 .detail,
 .status,
+.run-summary,
 .artifact-list {
   color: var(--muted);
   font-size: 14px;
@@ -151,6 +152,10 @@ h2 {
 
 .version-artifacts {
   margin-top: 8px;
+}
+
+.run-summary {
+  margin-top: 6px;
 }
 
 .version-artifacts summary {

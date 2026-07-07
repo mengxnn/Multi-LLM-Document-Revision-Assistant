@@ -167,6 +167,48 @@ class ApplicationServiceTests(unittest.TestCase):
                 ),
             )
 
+    def test_project_details_include_version_run_summary(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "projects"
+            project = self._create_project(root, "Project_A_20260618", "Project A")
+            version = project / "outputs" / "120000-pending-v1"
+            layout = VersionLayout(version)
+            layout.ensure_dirs()
+            layout.run_log.write_text(
+                json.dumps(
+                    {
+                        "requested_cycles": 2,
+                        "actual_cycles": 1,
+                        "stopped_early": True,
+                        "stop_reason": "reviewer_requested_stop",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            write_manifest(
+                layout,
+                {
+                    "project_name": project.name,
+                    "version": 1,
+                    "status": "pending",
+                    "version_dir": version.name,
+                    "created_at": "2026-06-18 12:00:00",
+                    "mode": "real",
+                    "files": {"run_log": "metadata/run_log.json"},
+                },
+            )
+            self._write_latest(project, version)
+
+            app = RevisionApplication(projects_root=root)
+            detail = app.get_project_details(project.name)
+
+            summary = detail.versions[0].run_summary
+            self.assertIsNotNone(summary)
+            self.assertEqual(summary.requested_cycles, 2)
+            self.assertEqual(summary.actual_cycles, 1)
+            self.assertTrue(summary.stopped_early)
+            self.assertEqual(summary.stop_reason, "reviewer_requested_stop")
+
     def test_apply_decision_updates_latest_version(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "projects"

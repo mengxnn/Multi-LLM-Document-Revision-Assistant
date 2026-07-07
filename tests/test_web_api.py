@@ -26,6 +26,7 @@ from office_revision.application.contracts import (
     ProjectDetail,
     ProjectSummary,
     RevisionRunResult,
+    RunSummary,
     StartProjectRequest,
     VersionSummary,
 )
@@ -126,6 +127,12 @@ class FakeWebApplication:
                     created_at="2026-06-27T10:00:00",
                     path=Path("projects/demo_20260627/outputs/100000-pending-v1"),
                     is_latest=True,
+                    run_summary=RunSummary(
+                        requested_cycles=2,
+                        actual_cycles=1,
+                        stopped_early=True,
+                        stop_reason="reviewer approved",
+                    ),
                     artifacts=ArtifactLinks(
                         final_md=Path("projects/demo_20260627/latest/final_draft/final.md")
                     ),
@@ -292,6 +299,9 @@ class WebApiEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["summary"]["project_id"], "demo_20260627")
         self.assertEqual(response.json()["versions"][0]["artifacts"]["final_md"], "projects/demo_20260627/latest/final_draft/final.md")
+        self.assertEqual(response.json()["versions"][0]["run_summary"]["requested_cycles"], 2)
+        self.assertEqual(response.json()["versions"][0]["run_summary"]["actual_cycles"], 1)
+        self.assertTrue(response.json()["versions"][0]["run_summary"]["stopped_early"])
         self.assertEqual(response.json()["input_summaries"]["requirements"]["kind"], "md")
         self.assertEqual(response.json()["input_summaries"]["requirements"]["warnings"], ["long"])
 

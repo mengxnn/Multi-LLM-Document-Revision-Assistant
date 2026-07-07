@@ -15,6 +15,7 @@ from office_revision.application.contracts import (
     ProjectDetail,
     ProjectSummary,
     RevisionRunResult,
+    RunSummary,
     VersionSummary,
 )
 from office_revision.web.runs import RunRecord
@@ -40,6 +41,17 @@ def artifacts_to_dict(artifacts: ArtifactLinks) -> dict[str, str | None]:
     }
 
 
+def run_summary_to_dict(summary: RunSummary | None) -> dict[str, Any] | None:
+    if summary is None:
+        return None
+    return {
+        "requested_cycles": summary.requested_cycles,
+        "actual_cycles": summary.actual_cycles,
+        "stopped_early": summary.stopped_early,
+        "stop_reason": summary.stop_reason,
+    }
+
+
 def project_summary_to_dict(summary: ProjectSummary) -> dict[str, Any]:
     return {
         "project_id": summary.project_id,
@@ -62,6 +74,7 @@ def version_summary_to_dict(version: VersionSummary) -> dict[str, Any]:
         "path": path_to_string(version.path),
         "is_latest": version.is_latest,
         "artifacts": artifacts_to_dict(version.artifacts),
+        "run_summary": run_summary_to_dict(version.run_summary),
     }
 
 
