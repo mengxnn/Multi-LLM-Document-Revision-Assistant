@@ -205,6 +205,15 @@ class WebStaticTests(TestCase):
         self.assertIn("input-summary", styles.text)
         self.assertIn("input-warning", styles.text)
 
+    def test_project_inputs_show_scanned_pdf_ocr_warning(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("pdf_needs_ocr", response.text)
+        self.assertIn("疑似扫描版或图片版 PDF，需要 OCR", response.text)
+
     def test_project_detail_can_be_collapsed_from_javascript(self):
         client = TestClient(create_app())
 

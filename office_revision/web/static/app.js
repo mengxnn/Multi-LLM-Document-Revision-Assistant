@@ -127,6 +127,9 @@ function warningText(code) {
   if (code === "empty") {
     return "提取文本为空";
   }
+  if (code === "pdf_needs_ocr") {
+    return "疑似扫描版或图片版 PDF，需要 OCR";
+  }
   if (code === "long") {
     return "内容较长，可能增加耗时或占用更多上下文";
   }

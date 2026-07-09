@@ -59,7 +59,7 @@ class DocumentIoTests(unittest.TestCase):
             path = Path(temp_dir) / "scanned.pdf"
             write_blank_pdf(path)
 
-            with self.assertRaisesRegex(ValueError, "scanned or image-only"):
+            with self.assertRaisesRegex(ValueError, "OCR"):
                 read_source_text(path)
 
     def test_reads_docx_headings_paragraphs_and_tables(self):

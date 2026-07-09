@@ -18,6 +18,8 @@ def inspect_input_file(path: str | Path) -> InputSummary:
     warnings: list[str] = []
     if extracted_chars == 0:
         warnings.append("empty")
+        if input_path.suffix.lower() == ".pdf":
+            warnings.append("pdf_needs_ocr")
     if extracted_chars > LONG_INPUT_CHAR_LIMIT:
         warnings.append("long")
     if extracted_chars > VERY_LONG_INPUT_CHAR_LIMIT:

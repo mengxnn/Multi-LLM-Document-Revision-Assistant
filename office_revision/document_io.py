@@ -55,7 +55,9 @@ def read_pdf_text(path: str | Path) -> str:
         if text:
             pages.append(f"<!-- page {index} -->\n\n{text}")
     if not pages:
-        raise ValueError("No text could be extracted from this PDF. It may be scanned or image-only.")
+        raise ValueError(
+            "No text could be extracted from this PDF. It may be scanned or image-only and needs OCR."
+        )
     return "\n\n".join(pages)
 
 
