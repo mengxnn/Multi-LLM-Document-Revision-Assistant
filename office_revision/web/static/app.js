@@ -12,6 +12,7 @@ const requirementsEl = document.querySelector("#requirements-text");
 const requirementsFileEl = document.querySelector("#requirements-file");
 const sourceFileEl = document.querySelector("#source-file");
 const meetingNotesFileEl = document.querySelector("#meeting-notes-file");
+const enableOcrEl = document.querySelector("#enable-ocr");
 const startButton = document.querySelector("#start-project");
 const runStatusEl = document.querySelector("#run-status");
 const runEventsEl = document.querySelector("#run-events");
@@ -97,8 +98,14 @@ function inputDisplayLabel(name) {
   if (name === "source_extracted.md") {
     return "初稿PDF提取文本";
   }
+  if (name === "source_ocr.md") {
+    return "初稿PDF OCR文本";
+  }
   if (name === "requirements.md") {
     return "修改要求";
+  }
+  if (name === "requirements_ocr.md") {
+    return "修改要求PDF OCR文本";
   }
   if (name === "requirements.pdf") {
     return "修改要求PDF原文";
@@ -108,6 +115,9 @@ function inputDisplayLabel(name) {
   }
   if (name === "meeting_notes.pdf") {
     return "会议纪要PDF原文";
+  }
+  if (name === "meeting_notes_ocr.md") {
+    return "会议纪要PDF OCR文本";
   }
   return name;
 }
@@ -603,11 +613,13 @@ function buildStartPreview() {
   const meetingNotesTextEl = document.querySelector("#meeting-notes-text");
   const cycles = Number(document.querySelector("#cycles").value || 2);
   const dryRun = document.querySelector("#dry-run").checked;
+  const enableOcr = enableOcrEl.checked;
   return [
     "请确认本次运行设置：",
     "",
     `运行模式：${dryRun ? "dry-run 测试" : "真实模型"}`,
     `循环次数：${cycles}`,
+    `OCR：${enableOcr ? "启用" : "关闭"}`,
     `修改要求：${inputSourceLabel(requirementsEl, requirementsFileEl)}`,
     `初稿：${inputSourceLabel(sourceTextEl, sourceFileEl)}`,
     `会议纪要：${inputSourceLabel(meetingNotesTextEl, meetingNotesFileEl)}`,
@@ -632,6 +644,9 @@ async function pollRun(runId) {
       item.textContent = event.display_message || event.message;
       runEventsEl.appendChild(item);
     }
+    if (payload.error) {
+      renderRunError(payload.error);
+    }
     if (payload.status === "queued" || payload.status === "running") {
       window.setTimeout(() => pollRun(runId), 1000);
     } else {
@@ -640,6 +655,15 @@ async function pollRun(runId) {
   } catch (error) {
     setText(runStatusEl, error.message);
   }
+}
+
+function renderRunError(error) {
+  const stage = error.stage || "unknown";
+  const message = error.message || "未知错误";
+  setText(runStatusEl, `failed: ${stage}`);
+  const item = document.createElement("li");
+  item.textContent = `错误信息：${message}`;
+  runEventsEl.appendChild(item);
 }
 
 async function startProject() {
@@ -654,6 +678,7 @@ async function startProject() {
     appendTextOrFile(formData, "meeting_notes_text", document.querySelector("#meeting-notes-text"), "meeting_notes_file", meetingNotesFileEl);
     formData.append("cycles", String(Number(document.querySelector("#cycles").value || 2)));
     formData.append("dry_run", document.querySelector("#dry-run").checked ? "true" : "false");
+    formData.append("enable_ocr", enableOcrEl.checked ? "true" : "false");
 
     const payload = await requestJson("/api/projects/start-upload", {
       method: "POST",

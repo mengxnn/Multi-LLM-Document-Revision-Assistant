@@ -151,6 +151,8 @@ class StartProjectRequest:
     project_title_language: str = "auto"
     cycles: int = 2
     dry_run: bool = False
+    enable_ocr: bool = False
+    ocr_language: str = "chi_sim+eng"
     summary_mode: str = "rule"
     writer_model: str | None = None
     reviewer_model: str | None = None

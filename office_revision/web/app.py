@@ -83,6 +83,7 @@ def create_app(
             project_title=_optional_string(payload.get("project_title")),
             cycles=_int_value(payload.get("cycles"), default=2),
             dry_run=_bool_value(payload.get("dry_run")),
+            enable_ocr=_bool_value(payload.get("enable_ocr")),
             summary_mode=str(payload.get("summary_mode") or "rule"),
         )
         record = runs.create_run(kind="start_project", project_id=None)
@@ -111,6 +112,7 @@ def create_app(
         project_title: str | None = Form(default=None),
         cycles: int = Form(default=2),
         dry_run: bool = Form(default=False),
+        enable_ocr: bool = Form(default=False),
         summary_mode: str = Form(default="rule"),
         requirements_file: UploadFile | None = File(default=None),
         source_file: UploadFile | None = File(default=None),
@@ -154,6 +156,7 @@ def create_app(
             project_title=_optional_string(project_title),
             cycles=cycles,
             dry_run=dry_run,
+            enable_ocr=enable_ocr,
             summary_mode=summary_mode,
         )
         record = runs.create_run(kind="start_project", project_id=None)

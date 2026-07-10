@@ -116,6 +116,7 @@ class WebStaticTests(TestCase):
         self.assertIn('id="requirements-file"', response.text)
         self.assertIn('id="source-file"', response.text)
         self.assertIn('id="meeting-notes-file"', response.text)
+        self.assertIn('id="enable-ocr"', response.text)
         self.assertIn('accept=".docx,.md,.pdf,.txt"', response.text)
 
     def test_start_project_javascript_submits_multipart_form_data(self):
@@ -129,6 +130,7 @@ class WebStaticTests(TestCase):
         self.assertIn("requirements_file", response.text)
         self.assertIn("source_file", response.text)
         self.assertIn("meeting_notes_file", response.text)
+        self.assertIn("enable_ocr", response.text)
 
     def test_start_project_javascript_confirms_run_preview_before_submit(self):
         client = TestClient(create_app())
@@ -141,9 +143,20 @@ class WebStaticTests(TestCase):
         self.assertIn("window.confirm", response.text)
         self.assertIn("运行模式", response.text)
         self.assertIn("循环次数", response.text)
+        self.assertIn("OCR", response.text)
         self.assertIn("修改要求", response.text)
         self.assertIn("writer 配置", response.text)
         self.assertIn("reviewer 配置", response.text)
+
+    def test_run_polling_displays_failure_message(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("payload.error", response.text)
+        self.assertIn("错误信息", response.text)
+        self.assertIn("renderRunError", response.text)
 
     def test_continue_project_javascript_confirms_run_preview_before_submit(self):
         client = TestClient(create_app())

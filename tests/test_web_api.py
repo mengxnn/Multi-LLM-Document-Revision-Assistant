@@ -424,6 +424,31 @@ class WebApiEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Path(fake_app.received_start_request.source_path).suffix, ".pdf")
 
+    def test_start_project_upload_endpoint_passes_ocr_option(self):
+        fake_app = FakeWebApplication()
+        with TemporaryDirectory() as temp_dir:
+            client = TestClient(
+                create_app(
+                    application=fake_app,
+                    run_store=InMemoryRunStore(),
+                    run_synchronously=True,
+                    projects_root=Path(temp_dir) / "projects",
+                )
+            )
+
+            response = client.post(
+                "/api/projects/start-upload",
+                data={
+                    "requirements_text": "Improve it.",
+                    "cycles": "1",
+                    "dry_run": "true",
+                    "enable_ocr": "true",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(fake_app.received_start_request.enable_ocr)
+
     def test_start_project_upload_endpoint_rejects_unsupported_files_and_cleans_uploads(self):
         with TemporaryDirectory() as temp_dir:
             projects_root = Path(temp_dir) / "projects"

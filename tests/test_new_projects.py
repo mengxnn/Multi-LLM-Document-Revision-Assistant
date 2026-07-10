@@ -88,6 +88,38 @@ class NewProjectTests(unittest.TestCase):
 
             self.assertFalse((root / "projects").exists())
 
+    def test_image_only_pdf_uses_ocr_when_enabled(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "scanned.pdf"
+            write_blank_pdf(source)
+            calls = []
+            service = NewProjectService(
+                root / "projects",
+                ocr_reader=lambda path, language: calls.append((Path(path), language))
+                or "OCR draft body",
+            )
+
+            result = RevisionApplication(
+                projects_root=root / "projects",
+                new_project_service=service,
+            ).start_new_project(
+                StartProjectRequest(
+                    requirements_text="Improve it.",
+                    source_path=str(source),
+                    cycles=1,
+                    dry_run=True,
+                    enable_ocr=True,
+                )
+            )
+
+            self.assertEqual(calls, [(source, "chi_sim+eng")])
+            self.assertIn(
+                "OCR draft body",
+                (result.project_path / "inputs" / "source_ocr.md").read_text(encoding="utf-8"),
+            )
+            self.assertTrue((result.project_path / "inputs" / "source.pdf").exists())
+
     def test_uploaded_pdf_source_keeps_original_and_extracted_text(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -118,6 +118,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use deterministic local agents without calling external models.",
     )
+    parser.add_argument(
+        "--enable-ocr",
+        action="store_true",
+        help="Use local OCR for image-only PDF inputs when normal text extraction fails.",
+    )
     parser.add_argument("--writer-model", help="Override model name for writer agent.")
     parser.add_argument("--reviewer-model", help="Override model name for reviewer agent.")
     parser.add_argument(
@@ -635,6 +640,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 project_title_language=args.project_title_language,
                 cycles=args.cycles,
                 dry_run=args.dry_run,
+                enable_ocr=args.enable_ocr,
                 summary_mode=args.summary_mode,
                 writer_model=args.writer_model,
                 reviewer_model=args.reviewer_model,

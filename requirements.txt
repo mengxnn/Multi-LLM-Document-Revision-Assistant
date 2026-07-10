@@ -5,3 +5,5 @@ pypdf
 fastapi
 uvicorn
 python-multipart
+PyMuPDF
+pytesseract

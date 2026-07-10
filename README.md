@@ -115,3 +115,17 @@ dry-run 输出在 `dry_run_outputs/`，真实模型输出在 `outputs/`。
 ### 产物打不开或找不到
 
 到“项目”页点击“详情”，使用“打开文件”或“文件位置”按钮查看。
+
+### OCR 适合什么情况
+
+OCR 只用于图片版 PDF 或扫描版 PDF 的文字识别。它可以把图片里的文字转成文本，但不能理解图片内容、图表含义或复杂版面。
+
+使用 OCR 前，需要先安装 Tesseract，并确认 `tesseract.exe` 已加入 PATH。程序也会自动识别 `C:\Program Files\Tesseract-OCR\tesseract.exe` 和 `D:\Tesseract-OCR\tesseract.exe`。
+
+如果安装在其他位置，可以在 `config/settings.env` 添加：
+
+```text
+TESSERACT_CMD=D:\Tesseract-OCR\tesseract.exe
+```
+
+双栏论文、表格、脚注和图注的阅读顺序可能不完全准确。遇到这类 PDF，建议先检查 OCR 文本，再决定是否交给模型处理。
