@@ -150,7 +150,8 @@ h2 {
   padding: 12px;
 }
 
-.version-artifacts {
+.version-artifacts,
+.project-inputs {
   margin-top: 8px;
 }
 
@@ -158,7 +159,8 @@ h2 {
   margin-top: 6px;
 }
 
-.version-artifacts summary {
+.version-artifacts summary,
+.project-inputs summary {
   cursor: pointer;
   font-weight: 650;
 }

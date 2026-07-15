@@ -24,6 +24,7 @@ class DistributionDocsTests(TestCase):
         self.assertIn("Tesseract", readme)
         self.assertIn("PATH", readme)
         self.assertIn("TESSERACT_CMD", readme)
+        self.assertIn("tools\\tesseract", readme)
         self.assertIn("不能理解图片内容", readme)
         self.assertIn("双栏论文", readme)
 

@@ -59,10 +59,26 @@ def _candidate_tesseract_commands() -> list[Path]:
     candidates: list[Path] = []
     if configured:
         candidates.append(Path(configured))
+    candidates.append(Path("tools") / "tesseract" / "tesseract.exe")
     candidates.extend(
         [
             Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
-            Path(r"D:\Tesseract-OCR\tesseract.exe"),
         ]
     )
-    return candidates
+    candidates.extend(
+        Path(f"{letter}:\\Tesseract-OCR\\tesseract.exe")
+        for letter in "CDEFGHIJKLMNOPQRSTUVWXYZ"
+    )
+    return _deduplicate_paths(candidates)
+
+
+def _deduplicate_paths(paths: list[Path]) -> list[Path]:
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for path in paths:
+        key = str(path).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return unique

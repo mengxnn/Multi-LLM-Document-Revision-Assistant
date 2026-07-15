@@ -332,18 +332,25 @@ function renderProjectDetail(detail) {
 
   const inputNames = Object.keys(detail.inputs || {});
   if (inputNames.length > 0) {
-    const inputs = document.createElement("div");
-    inputs.className = "artifact-list";
-    inputs.appendChild(createTextElement("strong", null, "输入文件"));
-    for (const name of inputNames) {
-      inputs.appendChild(createPathLine(inputDisplayLabel(name), detail.inputs[name], inputDisplayPath));
-      const summary = detail.input_summaries ? detail.input_summaries[name] : null;
-      if (summary) {
-        inputs.appendChild(renderInputSummary(summary));
-      }
-    }
-    projectDetailEl.appendChild(inputs);
+    projectDetailEl.appendChild(renderProjectInputs(detail, inputNames));
   }
+}
+
+function renderProjectInputs(detail, inputNames) {
+  const details = document.createElement("details");
+  details.className = "project-inputs";
+  details.appendChild(createTextElement("summary", null, "输入文件"));
+  const inputs = document.createElement("div");
+  inputs.className = "artifact-list";
+  for (const name of inputNames) {
+    inputs.appendChild(createPathLine(inputDisplayLabel(name), detail.inputs[name], inputDisplayPath));
+    const summary = detail.input_summaries ? detail.input_summaries[name] : null;
+    if (summary) {
+      inputs.appendChild(renderInputSummary(summary));
+    }
+  }
+  details.appendChild(inputs);
+  return details;
 }
 
 function renderInputSummary(summary) {

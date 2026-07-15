@@ -184,6 +184,19 @@ class WebStaticTests(TestCase):
         self.assertIn("version-artifacts", response.text)
         self.assertIn("版本详情", response.text)
 
+    def test_project_inputs_render_in_collapsible_details(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+        styles = client.get("/static/styles.css")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(styles.status_code, 200)
+        self.assertIn("renderProjectInputs", response.text)
+        self.assertIn("project-inputs", response.text)
+        self.assertIn(".project-inputs", styles.text)
+        self.assertIn("输入文件", response.text)
+
     def test_project_versions_render_run_summary(self):
         client = TestClient(create_app())
 
