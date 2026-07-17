@@ -21,6 +21,7 @@ from office_revision.application.contracts import (
     RevisionApplicationError,
     StartProjectRequest,
 )
+from office_revision.ocr import check_ocr_environment
 from office_revision.web.runs import InMemoryRunStore
 from office_revision.web.schemas import (
     active_model_profile_to_dict,
@@ -39,12 +40,14 @@ def create_app(
     run_store: InMemoryRunStore | None = None,
     run_synchronously: bool = False,
     opener: Callable[[Path, str], None] | None = None,
+    ocr_checker: Callable[[], dict[str, object]] | None = None,
     projects_root: Path | str = Path("projects"),
 ) -> FastAPI:
     revision_app = application or RevisionApplication()
     runs = run_store or InMemoryRunStore()
     executor = ThreadPoolExecutor(max_workers=2)
     artifact_opener = opener or _open_local_path
+    inspect_ocr_environment = ocr_checker or check_ocr_environment
     safe_projects_root = Path(projects_root).resolve()
     app = FastAPI(title="多 Agent 办公文档修订助手")
     static_dir = Path(__file__).parent / "static"
@@ -306,6 +309,10 @@ def create_app(
             "profile_id": profile_id,
             "connection": model_connection_status_to_dict(status),
         }
+
+    @app.post("/api/ocr/check")
+    def check_ocr() -> dict[str, object]:
+        return inspect_ocr_environment()
 
     @app.post("/api/artifacts/open")
     def open_artifact(payload: dict[str, object]) -> dict[str, object]:

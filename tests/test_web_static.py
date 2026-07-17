@@ -117,6 +117,8 @@ class WebStaticTests(TestCase):
         self.assertIn('id="source-file"', response.text)
         self.assertIn('id="meeting-notes-file"', response.text)
         self.assertIn('id="enable-ocr"', response.text)
+        self.assertIn('id="check-ocr"', response.text)
+        self.assertIn('id="ocr-status"', response.text)
         self.assertIn('accept=".docx,.md,.pdf,.txt"', response.text)
 
     def test_start_project_javascript_submits_multipart_form_data(self):
@@ -131,6 +133,20 @@ class WebStaticTests(TestCase):
         self.assertIn("source_file", response.text)
         self.assertIn("meeting_notes_file", response.text)
         self.assertIn("enable_ocr", response.text)
+
+    def test_ocr_environment_can_be_checked_from_javascript(self):
+        client = TestClient(create_app())
+
+        script = client.get("/static/app.js")
+        styles = client.get("/static/styles.css")
+
+        self.assertEqual(script.status_code, 200)
+        self.assertIn("checkOcrEnvironment", script.text)
+        self.assertIn("renderOcrStatus", script.text)
+        self.assertIn("/api/ocr/check", script.text)
+        self.assertIn("程序路径", script.text)
+        self.assertIn("语言包", script.text)
+        self.assertIn(".ocr-status", styles.text)
 
     def test_start_project_javascript_confirms_run_preview_before_submit(self):
         client = TestClient(create_app())

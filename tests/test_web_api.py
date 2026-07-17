@@ -283,6 +283,27 @@ class FakeWebApplication:
 
 
 class WebApiEndpointTests(TestCase):
+    def test_check_ocr_environment_endpoint(self):
+        expected = {
+            "ok": True,
+            "path": r"D:\Tesseract-OCR\tesseract.exe",
+            "version": "5.5.0",
+            "languages": ["chi_sim", "eng"],
+            "missing_languages": [],
+            "message": "OCR 环境可用。",
+        }
+        client = TestClient(
+            create_app(
+                application=FakeWebApplication(),
+                ocr_checker=lambda: expected,
+            )
+        )
+
+        response = client.post("/api/ocr/check")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), expected)
+
     def test_list_projects_endpoint(self):
         client = TestClient(create_app(application=FakeWebApplication()))
 

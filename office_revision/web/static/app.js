@@ -13,6 +13,8 @@ const requirementsFileEl = document.querySelector("#requirements-file");
 const sourceFileEl = document.querySelector("#source-file");
 const meetingNotesFileEl = document.querySelector("#meeting-notes-file");
 const enableOcrEl = document.querySelector("#enable-ocr");
+const checkOcrButtonEl = document.querySelector("#check-ocr");
+const ocrStatusEl = document.querySelector("#ocr-status");
 const startButton = document.querySelector("#start-project");
 const runStatusEl = document.querySelector("#run-status");
 const runEventsEl = document.querySelector("#run-events");
@@ -859,6 +861,37 @@ async function checkConnections() {
   }
 }
 
+function renderOcrStatus(payload) {
+  const lines = [payload.message];
+  if (payload.path) {
+    lines.push(`程序路径：${payload.path}`);
+  }
+  if (payload.version) {
+    lines.push(`版本：${payload.version}`);
+  }
+  if (payload.languages?.length) {
+    lines.push(`语言包：${payload.languages.join(", ")}`);
+  }
+  ocrStatusEl.textContent = lines.join("\n");
+  ocrStatusEl.classList.toggle("is-ok", Boolean(payload.ok));
+  ocrStatusEl.classList.toggle("is-error", !payload.ok);
+  ocrStatusEl.hidden = false;
+}
+
+async function checkOcrEnvironment() {
+  checkOcrButtonEl.disabled = true;
+  checkOcrButtonEl.textContent = "检查中...";
+  try {
+    const payload = await requestJson("/api/ocr/check", {method: "POST"});
+    renderOcrStatus(payload);
+  } catch (error) {
+    renderOcrStatus({ok: false, message: error.message});
+  } finally {
+    checkOcrButtonEl.disabled = false;
+    checkOcrButtonEl.textContent = "检查 OCR";
+  }
+}
+
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => showView(tab.dataset.view));
 });
@@ -874,6 +907,7 @@ document.querySelector("#refresh-profiles").addEventListener("click", () => {
 });
 document.querySelector("#profile-form").addEventListener("submit", saveModelProfile);
 document.querySelector("#check-connections").addEventListener("click", checkConnections);
+checkOcrButtonEl.addEventListener("click", checkOcrEnvironment);
 document.querySelector("#continue-project").addEventListener("click", continueProject);
 document.querySelector("#decision-accept").addEventListener("click", () => applyDecision(selectedProjectId, "accept"));
 document.querySelector("#decision-continue").addEventListener("click", () => applyDecision(selectedProjectId, "continue"));

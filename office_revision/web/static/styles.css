@@ -262,6 +262,20 @@ input {
   width: auto;
 }
 
+.ocr-status {
+  margin: 10px 0 14px;
+  padding-left: 10px;
+  border-left: 3px solid var(--danger);
+  color: var(--danger);
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.ocr-status.is-ok {
+  border-left-color: #067647;
+  color: #067647;
+}
+
 button {
   border: 0;
   border-radius: 6px;

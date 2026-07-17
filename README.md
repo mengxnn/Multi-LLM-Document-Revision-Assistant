@@ -122,6 +122,8 @@ OCR 只用于图片版 PDF 或扫描版 PDF 的文字识别。它可以把图片
 
 使用 OCR 前，需要先安装 Tesseract，并确认 `tesseract.exe` 已加入 PATH。程序也会自动识别 `tools\tesseract\tesseract.exe`、`C:\Program Files\Tesseract-OCR\tesseract.exe`，以及常见盘符下的 `Tesseract-OCR\tesseract.exe`。
 
+可在网页“新建项目”中点击“检查 OCR”，查看实际使用路径、版本和已安装语言包。
+
 如果要做成解压即用的压缩包，可以把 Tesseract 整个目录复制到项目的 `tools\tesseract\` 下，确保里面有 `tesseract.exe`。
 
 如果安装在其他位置，可以在 `config/settings.env` 添加：
