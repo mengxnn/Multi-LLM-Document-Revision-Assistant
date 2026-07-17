@@ -22,7 +22,7 @@ class PdfTextExtraction:
 
 
 @dataclass(frozen=True)
-class _PdfTextBlock:
+class PositionedTextLine:
     x0: float
     y0: float
     x1: float
@@ -88,20 +88,13 @@ def extract_pdf_text(path: str | Path) -> PdfTextExtraction:
             if not blocks:
                 page_layouts.append("empty")
                 continue
-            two_column = _is_two_column_page(
+            ordered, two_column = order_positioned_text_lines(
                 blocks,
                 page_width=float(page.rect.width),
                 page_height=float(page.rect.height),
             )
             page_layouts.append("two-column" if two_column else "single-column")
-            if two_column:
-                ordered = _order_two_column_blocks(
-                    blocks,
-                    page_width=float(page.rect.width),
-                )
-            else:
-                ordered = sorted(blocks, key=lambda item: (item.y0, item.x0))
-            text = _join_pdf_blocks(ordered)
+            text = join_positioned_text_lines(ordered)
             if text:
                 pages.append(f"<!-- page {index} -->\n\n{text}")
     finally:
@@ -116,8 +109,8 @@ def extract_pdf_text(path: str | Path) -> PdfTextExtraction:
     )
 
 
-def _pdf_text_blocks(page) -> list[_PdfTextBlock]:
-    blocks: list[_PdfTextBlock] = []
+def _pdf_text_blocks(page) -> list[PositionedTextLine]:
+    blocks: list[PositionedTextLine] = []
     for raw_block in page.get_text("dict", sort=False).get("blocks", []):
         if int(raw_block.get("type", 0)) != 0:
             continue
@@ -130,7 +123,7 @@ def _pdf_text_blocks(page) -> list[_PdfTextBlock]:
             if not text or not bbox or len(bbox) < 4:
                 continue
             blocks.append(
-                _PdfTextBlock(
+                PositionedTextLine(
                     x0=float(bbox[0]),
                     y0=float(bbox[1]),
                     x1=float(bbox[2]),
@@ -141,8 +134,33 @@ def _pdf_text_blocks(page) -> list[_PdfTextBlock]:
     return blocks
 
 
+def order_positioned_text_lines(
+    lines: list[PositionedTextLine],
+    *,
+    page_width: float,
+    page_height: float,
+) -> tuple[list[PositionedTextLine], bool]:
+    two_column = _is_two_column_page(
+        lines,
+        page_width=page_width,
+        page_height=page_height,
+    )
+    if two_column:
+        ordered = _order_two_column_blocks(
+            lines,
+            page_width=page_width,
+        )
+    else:
+        ordered = sorted(lines, key=lambda item: (item.y0, item.x0))
+    return ordered, two_column
+
+
+def join_positioned_text_lines(lines: list[PositionedTextLine]) -> str:
+    return _join_pdf_blocks(lines)
+
+
 def _is_two_column_page(
-    blocks: list[_PdfTextBlock],
+    blocks: list[PositionedTextLine],
     *,
     page_width: float,
     page_height: float,
@@ -176,10 +194,10 @@ def _is_two_column_page(
         min(block.y0 for block in left),
         min(block.y0 for block in right),
     )
-    return overlap >= max(12.0, page_height * 0.02)
+    return overlap >= max(8.0, page_height * 0.01)
 
 
-def _weighted_column_center(blocks: list[_PdfTextBlock]) -> float:
+def _weighted_column_center(blocks: list[PositionedTextLine]) -> float:
     weights = [max(len(block.text), 1) for block in blocks]
     weighted_sum = sum(
         block.center_x * weight
@@ -189,10 +207,10 @@ def _weighted_column_center(blocks: list[_PdfTextBlock]) -> float:
 
 
 def _order_two_column_blocks(
-    blocks: list[_PdfTextBlock],
+    blocks: list[PositionedTextLine],
     *,
     page_width: float,
-) -> list[_PdfTextBlock]:
+) -> list[PositionedTextLine]:
     split = page_width / 2
     separators = sorted(
         (
@@ -204,7 +222,7 @@ def _order_two_column_blocks(
         key=lambda item: (item.y0, item.x0),
     )
     pending = [block for block in blocks if block not in separators]
-    ordered: list[_PdfTextBlock] = []
+    ordered: list[PositionedTextLine] = []
     for separator in separators:
         before = [block for block in pending if block.center_y < separator.center_y]
         ordered.extend(_order_column_band(before, split=split))
@@ -215,10 +233,10 @@ def _order_two_column_blocks(
 
 
 def _order_column_band(
-    blocks: list[_PdfTextBlock],
+    blocks: list[PositionedTextLine],
     *,
     split: float,
-) -> list[_PdfTextBlock]:
+) -> list[PositionedTextLine]:
     left = sorted(
         (block for block in blocks if block.center_x < split),
         key=lambda item: (item.y0, item.x0),
@@ -230,7 +248,7 @@ def _order_column_band(
     return [*left, *right]
 
 
-def _join_pdf_blocks(blocks: list[_PdfTextBlock]) -> str:
+def _join_pdf_blocks(blocks: list[PositionedTextLine]) -> str:
     if not blocks:
         return ""
     parts = [blocks[0].text]
