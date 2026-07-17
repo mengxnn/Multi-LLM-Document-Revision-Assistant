@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .application.contracts import InputSummary
-from .document_io import read_source_text
+from .document_io import extract_pdf_text, read_source_text
 
 
 LONG_INPUT_CHAR_LIMIT = 20_000
@@ -14,12 +14,14 @@ VERY_LONG_INPUT_CHAR_LIMIT = 80_000
 
 def inspect_input_file(path: str | Path) -> InputSummary:
     input_path = Path(path)
-    extracted_chars = _extracted_char_count(input_path)
+    extracted_chars, used_two_column_layout = _extracted_input_info(input_path)
     warnings: list[str] = []
     if extracted_chars == 0:
         warnings.append("empty")
         if input_path.suffix.lower() == ".pdf":
             warnings.append("pdf_needs_ocr")
+    if used_two_column_layout:
+        warnings.append("pdf_two_column")
     if extracted_chars > LONG_INPUT_CHAR_LIMIT:
         warnings.append("long")
     if extracted_chars > VERY_LONG_INPUT_CHAR_LIMIT:
@@ -99,11 +101,14 @@ def input_summary_from_dict(name: str, value: dict[str, Any]) -> InputSummary:
     )
 
 
-def _extracted_char_count(path: Path) -> int:
+def _extracted_input_info(path: Path) -> tuple[int, bool]:
     try:
-        return len(read_source_text(path).strip())
-    except (OSError, UnicodeDecodeError, ValueError):
-        return 0
+        if path.suffix.lower() == ".pdf":
+            result = extract_pdf_text(path)
+            return len(result.text.strip()), result.used_two_column_layout
+        return len(read_source_text(path).strip()), False
+    except (OSError, UnicodeDecodeError, ValueError, RuntimeError):
+        return 0, False
 
 
 def _kind(path: Path) -> str:

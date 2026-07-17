@@ -142,6 +142,9 @@ function warningText(code) {
   if (code === "pdf_needs_ocr") {
     return "疑似扫描版或图片版 PDF，需要 OCR";
   }
+  if (code === "pdf_two_column") {
+    return "已按双栏版面顺序提取";
+  }
   if (code === "long") {
     return "内容较长，可能增加耗时或占用更多上下文";
   }

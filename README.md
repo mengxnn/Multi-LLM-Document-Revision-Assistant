@@ -120,6 +120,8 @@ dry-run 输出在 `dry_run_outputs/`，真实模型输出在 `outputs/`。
 
 OCR 只用于图片版 PDF 或扫描版 PDF 的文字识别。它可以把图片里的文字转成文本，但不能理解图片内容、图表含义或复杂版面。
 
+文本型 PDF 会自动识别常见的单栏和双栏版面；检测到双栏时，程序会先读取左栏，再读取右栏。复杂表格、浮动图注和非常规多栏版面仍可能需要人工检查。
+
 使用 OCR 前，需要先安装 Tesseract，并确认 `tesseract.exe` 已加入 PATH。程序也会自动识别 `tools\tesseract\tesseract.exe`、`C:\Program Files\Tesseract-OCR\tesseract.exe`，以及常见盘符下的 `Tesseract-OCR\tesseract.exe`。
 
 可在网页“新建项目”中点击“检查 OCR”，查看实际使用路径、版本和已安装语言包。

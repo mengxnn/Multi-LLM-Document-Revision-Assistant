@@ -255,6 +255,8 @@ class WebStaticTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("pdf_needs_ocr", response.text)
         self.assertIn("疑似扫描版或图片版 PDF，需要 OCR", response.text)
+        self.assertIn("pdf_two_column", response.text)
+        self.assertIn("已按双栏版面顺序提取", response.text)
 
     def test_project_detail_can_be_collapsed_from_javascript(self):
         client = TestClient(create_app())

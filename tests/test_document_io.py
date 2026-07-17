@@ -5,7 +5,11 @@ from pathlib import Path
 from docx import Document
 from pypdf import PdfWriter
 
-from office_revision.document_io import read_source_text, write_final_docx
+from office_revision.document_io import (
+    extract_pdf_text,
+    read_source_text,
+    write_final_docx,
+)
 
 
 def write_text_pdf(path: Path, text: str) -> None:
@@ -44,6 +48,46 @@ def write_blank_pdf(path: Path) -> None:
         writer.write(output)
 
 
+def write_layout_pdf(path: Path, *, two_columns: bool) -> None:
+    import fitz
+
+    document = fitz.open()
+    page = document.new_page(width=600, height=800)
+    page.insert_textbox(
+        fitz.Rect(50, 35, 550, 80),
+        "FULL WIDTH PAPER TITLE",
+        fontsize=14,
+        align=fitz.TEXT_ALIGN_CENTER,
+    )
+    if two_columns:
+        # Insert the right column first to ensure extraction is based on layout,
+        # not PDF object order.
+        page.insert_textbox(
+            fitz.Rect(330, 120, 560, 300),
+            "RIGHT COLUMN FIRST PARAGRAPH.\nRIGHT COLUMN SECOND PARAGRAPH.",
+            fontsize=11,
+        )
+        page.insert_textbox(
+            fitz.Rect(40, 120, 270, 300),
+            "LEFT COLUMN FIRST PARAGRAPH.\nLEFT COLUMN SECOND PARAGRAPH.",
+            fontsize=11,
+        )
+    else:
+        page.insert_textbox(
+            fitz.Rect(70, 120, 530, 300),
+            "SINGLE COLUMN FIRST PARAGRAPH.\nSINGLE COLUMN SECOND PARAGRAPH.",
+            fontsize=11,
+        )
+    page.insert_textbox(
+        fitz.Rect(50, 700, 550, 740),
+        "FULL WIDTH FOOTER",
+        fontsize=10,
+        align=fitz.TEXT_ALIGN_CENTER,
+    )
+    document.save(path)
+    document.close()
+
+
 class DocumentIoTests(unittest.TestCase):
     def test_reads_text_pdf_pages(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -61,6 +105,29 @@ class DocumentIoTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "OCR"):
                 read_source_text(path)
+
+    def test_reads_two_column_pdf_in_visual_reading_order(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "paper.pdf"
+            write_layout_pdf(path, two_columns=True)
+
+            result = extract_pdf_text(path)
+
+            self.assertEqual(result.page_layouts, ("two-column",))
+            self.assertLess(result.text.index("FULL WIDTH PAPER TITLE"), result.text.index("LEFT COLUMN"))
+            self.assertLess(result.text.index("LEFT COLUMN"), result.text.index("RIGHT COLUMN"))
+            self.assertLess(result.text.index("RIGHT COLUMN"), result.text.index("FULL WIDTH FOOTER"))
+
+    def test_keeps_single_column_pdf_in_vertical_order(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "report.pdf"
+            write_layout_pdf(path, two_columns=False)
+
+            result = extract_pdf_text(path)
+
+            self.assertEqual(result.page_layouts, ("single-column",))
+            self.assertLess(result.text.index("FULL WIDTH PAPER TITLE"), result.text.index("SINGLE COLUMN"))
+            self.assertLess(result.text.index("SINGLE COLUMN"), result.text.index("FULL WIDTH FOOTER"))
 
     def test_reads_docx_headings_paragraphs_and_tables(self):
         with tempfile.TemporaryDirectory() as temp_dir:
