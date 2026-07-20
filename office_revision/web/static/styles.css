@@ -240,6 +240,48 @@ input {
   margin: 0;
 }
 
+.file-field > label {
+  margin: 0;
+}
+
+.selected-file-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.selected-file-list:empty {
+  display: none;
+}
+
+.selected-file-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafc;
+  font-weight: 400;
+}
+
+.selected-file-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.selected-file-size {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+button.selected-file-remove {
+  color: var(--danger);
+}
+
 .project-search,
 .project-sort {
   display: grid;

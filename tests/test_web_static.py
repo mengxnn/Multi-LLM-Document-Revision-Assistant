@@ -120,6 +120,21 @@ class WebStaticTests(TestCase):
         self.assertIn('id="check-ocr"', response.text)
         self.assertIn('id="ocr-status"', response.text)
         self.assertIn('accept=".docx,.md,.pdf,.txt"', response.text)
+        self.assertIn(
+            'id="requirements-file" type="file" accept=".docx,.md,.pdf,.txt" multiple',
+            response.text,
+        )
+        self.assertIn(
+            'id="source-file" type="file" accept=".docx,.md,.pdf,.txt" multiple',
+            response.text,
+        )
+        self.assertIn(
+            'id="meeting-notes-file" type="file" accept=".docx,.md,.pdf,.txt" multiple',
+            response.text,
+        )
+        self.assertIn('id="requirements-file-list"', response.text)
+        self.assertIn('id="source-file-list"', response.text)
+        self.assertIn('id="meeting-notes-file-list"', response.text)
 
     def test_start_project_javascript_submits_multipart_form_data(self):
         client = TestClient(create_app())
@@ -133,6 +148,23 @@ class WebStaticTests(TestCase):
         self.assertIn("source_file", response.text)
         self.assertIn("meeting_notes_file", response.text)
         self.assertIn("enable_ocr", response.text)
+        self.assertIn("appendTextAndFiles", response.text)
+        self.assertIn("for (const file of selectedFilesFor(fileElement))", response.text)
+        self.assertIn("formData.append(textName, textElement.value)", response.text)
+
+    def test_new_project_javascript_accumulates_and_removes_selected_files(self):
+        client = TestClient(create_app())
+
+        script = client.get("/static/app.js")
+        styles = client.get("/static/styles.css")
+
+        self.assertEqual(script.status_code, 200)
+        self.assertIn("selectedUploadFiles", script.text)
+        self.assertIn("addSelectedFiles", script.text)
+        self.assertIn("renderSelectedFiles", script.text)
+        self.assertIn("removeSelectedFile", script.text)
+        self.assertIn('removeButton.textContent = "删除"', script.text)
+        self.assertIn(".selected-file-list", styles.text)
 
     def test_ocr_environment_can_be_checked_from_javascript(self):
         client = TestClient(create_app())

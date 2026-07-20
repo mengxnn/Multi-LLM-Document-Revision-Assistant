@@ -422,6 +422,59 @@ class WebApiEndpointTests(TestCase):
         self.assertEqual(Path(request.source_path).suffix, ".txt")
         self.assertEqual(Path(request.meeting_notes_path).suffix, ".md")
 
+    def test_start_project_upload_endpoint_accepts_multiple_files_and_pasted_text(self):
+        fake_app = FakeWebApplication()
+        with TemporaryDirectory() as temp_dir:
+            client = TestClient(
+                create_app(
+                    application=fake_app,
+                    run_store=InMemoryRunStore(),
+                    run_synchronously=True,
+                    projects_root=Path(temp_dir) / "projects",
+                )
+            )
+
+            response = client.post(
+                "/api/projects/start-upload",
+                data={
+                    "requirements_text": "Manual requirement.",
+                    "source_text": "Manual source.",
+                    "cycles": "1",
+                    "dry_run": "true",
+                },
+                files=[
+                    (
+                        "requirements_file",
+                        ("format.md", b"Use headings.", "text/markdown"),
+                    ),
+                    (
+                        "requirements_file",
+                        ("policy.txt", b"Keep facts.", "text/plain"),
+                    ),
+                    (
+                        "source_file",
+                        ("part-one.md", b"First part.", "text/markdown"),
+                    ),
+                    (
+                        "source_file",
+                        ("part-two.txt", b"Second part.", "text/plain"),
+                    ),
+                ],
+            )
+
+        self.assertEqual(response.status_code, 200)
+        request = fake_app.received_start_request
+        self.assertEqual(request.requirements_text, "Manual requirement.")
+        self.assertEqual(request.source_text, "Manual source.")
+        self.assertEqual(
+            [Path(path).name for path in request.requirements_paths],
+            ["format.md", "policy.txt"],
+        )
+        self.assertEqual(
+            [Path(path).name for path in request.source_paths],
+            ["part-one.md", "part-two.txt"],
+        )
+
     def test_start_project_upload_endpoint_accepts_pdf_files(self):
         fake_app = FakeWebApplication()
         with TemporaryDirectory() as temp_dir:

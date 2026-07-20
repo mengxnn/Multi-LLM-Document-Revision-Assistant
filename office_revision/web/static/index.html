@@ -72,18 +72,21 @@
         <section id="view-new-project" class="view">
           <h2>新建项目</h2>
           <div class="upload-grid">
-            <label class="file-field" for="requirements-file">
-              <span>上传修改要求文件（docx/md/pdf/txt，可选）</span>
-              <input id="requirements-file" type="file" accept=".docx,.md,.pdf,.txt">
-            </label>
-            <label class="file-field" for="source-file">
-              <span>上传初稿文件（docx/md/pdf/txt，可选）</span>
-              <input id="source-file" type="file" accept=".docx,.md,.pdf,.txt">
-            </label>
-            <label class="file-field" for="meeting-notes-file">
-              <span>上传会议纪要文件（docx/md/pdf/txt，可选）</span>
-              <input id="meeting-notes-file" type="file" accept=".docx,.md,.pdf,.txt">
-            </label>
+            <div class="file-field">
+              <label for="requirements-file">上传修改要求文件（docx/md/pdf/txt，可多选）</label>
+              <input id="requirements-file" type="file" accept=".docx,.md,.pdf,.txt" multiple>
+              <ul id="requirements-file-list" class="selected-file-list" aria-live="polite"></ul>
+            </div>
+            <div class="file-field">
+              <label for="source-file">上传初稿文件（docx/md/pdf/txt，可多选）</label>
+              <input id="source-file" type="file" accept=".docx,.md,.pdf,.txt" multiple>
+              <ul id="source-file-list" class="selected-file-list" aria-live="polite"></ul>
+            </div>
+            <div class="file-field">
+              <label for="meeting-notes-file">上传会议纪要文件（docx/md/pdf/txt，可多选）</label>
+              <input id="meeting-notes-file" type="file" accept=".docx,.md,.pdf,.txt" multiple>
+              <ul id="meeting-notes-file-list" class="selected-file-list" aria-live="polite"></ul>
+            </div>
           </div>
           <label for="requirements-text">修改要求</label>
           <textarea id="requirements-text" rows="7" placeholder="请输入修改要求，必填"></textarea>

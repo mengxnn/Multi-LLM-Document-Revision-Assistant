@@ -12,6 +12,23 @@ const requirementsEl = document.querySelector("#requirements-text");
 const requirementsFileEl = document.querySelector("#requirements-file");
 const sourceFileEl = document.querySelector("#source-file");
 const meetingNotesFileEl = document.querySelector("#meeting-notes-file");
+const uploadFileGroups = [
+  {
+    input: requirementsFileEl,
+    list: document.querySelector("#requirements-file-list")
+  },
+  {
+    input: sourceFileEl,
+    list: document.querySelector("#source-file-list")
+  },
+  {
+    input: meetingNotesFileEl,
+    list: document.querySelector("#meeting-notes-file-list")
+  }
+];
+const selectedUploadFiles = new Map(
+  uploadFileGroups.map((group) => [group.input, []])
+);
 const enableOcrEl = document.querySelector("#enable-ocr");
 const checkOcrButtonEl = document.querySelector("#check-ocr");
 const ocrStatusEl = document.querySelector("#ocr-status");
@@ -610,14 +627,68 @@ async function loadModelProfiles() {
 }
 
 function updateStartButton() {
-  startButton.disabled = requirementsEl.value.trim().length === 0 && requirementsFileEl.files.length === 0;
+  startButton.disabled = (
+    requirementsEl.value.trim().length === 0
+    && selectedFilesFor(requirementsFileEl).length === 0
+  );
+}
+
+function selectedFilesFor(fileElement) {
+  return selectedUploadFiles.get(fileElement) || [];
+}
+
+function addSelectedFiles(fileElement, listElement) {
+  const current = selectedFilesFor(fileElement);
+  const additions = Array.from(fileElement.files);
+  selectedUploadFiles.set(fileElement, [...current, ...additions]);
+  fileElement.value = "";
+  renderSelectedFiles(fileElement, listElement);
+  updateStartButton();
+}
+
+function removeSelectedFile(fileElement, listElement, index) {
+  const files = selectedFilesFor(fileElement);
+  selectedUploadFiles.set(
+    fileElement,
+    files.filter((_, fileIndex) => fileIndex !== index)
+  );
+  renderSelectedFiles(fileElement, listElement);
+  updateStartButton();
+}
+
+function renderSelectedFiles(fileElement, listElement) {
+  listElement.innerHTML = "";
+  selectedFilesFor(fileElement).forEach((file, index) => {
+    const item = document.createElement("li");
+    item.className = "selected-file-item";
+    const name = createTextElement("span", "selected-file-name", file.name);
+    const size = createTextElement("span", "selected-file-size", formatBytes(file.size));
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "secondary compact selected-file-remove";
+    removeButton.textContent = "删除";
+    removeButton.setAttribute("aria-label", `删除文件 ${file.name}`);
+    removeButton.addEventListener(
+      "click",
+      () => removeSelectedFile(fileElement, listElement, index)
+    );
+    item.append(name, size, removeButton);
+    listElement.appendChild(item);
+  });
 }
 
 function inputSourceLabel(textElement, fileElement) {
-  if (fileElement.files.length > 0) {
-    return `文件：${fileElement.files[0].name}`;
+  const parts = [];
+  const files = selectedFilesFor(fileElement);
+  if (textElement.value.trim()) {
+    parts.push("手动输入");
   }
-  return textElement.value.trim() ? "手动输入" : "未提供";
+  if (files.length === 1) {
+    parts.push(`文件：${files[0].name}`);
+  } else if (files.length > 1) {
+    parts.push(`${files.length} 个文件：${files.map((file) => file.name).join("、")}`);
+  }
+  return parts.join(" + ") || "未提供";
 }
 
 function buildStartPreview() {
@@ -685,9 +756,9 @@ async function startProject() {
       return;
     }
     const formData = new FormData();
-    appendTextOrFile(formData, "requirements_text", requirementsEl, "requirements_file", requirementsFileEl);
-    appendTextOrFile(formData, "source_text", document.querySelector("#source-text"), "source_file", sourceFileEl);
-    appendTextOrFile(formData, "meeting_notes_text", document.querySelector("#meeting-notes-text"), "meeting_notes_file", meetingNotesFileEl);
+    appendTextAndFiles(formData, "requirements_text", requirementsEl, "requirements_file", requirementsFileEl);
+    appendTextAndFiles(formData, "source_text", document.querySelector("#source-text"), "source_file", sourceFileEl);
+    appendTextAndFiles(formData, "meeting_notes_text", document.querySelector("#meeting-notes-text"), "meeting_notes_file", meetingNotesFileEl);
     formData.append("cycles", String(Number(document.querySelector("#cycles").value || 2)));
     formData.append("dry_run", document.querySelector("#dry-run").checked ? "true" : "false");
     formData.append("enable_ocr", enableOcrEl.checked ? "true" : "false");
@@ -704,12 +775,11 @@ async function startProject() {
   }
 }
 
-function appendTextOrFile(formData, textName, textElement, fileName, fileElement) {
-  if (fileElement.files.length > 0) {
-    formData.append(fileName, fileElement.files[0]);
-    return;
-  }
+function appendTextAndFiles(formData, textName, textElement, fileName, fileElement) {
   formData.append(textName, textElement.value);
+  for (const file of selectedFilesFor(fileElement)) {
+    formData.append(fileName, file);
+  }
 }
 
 function createActivateProfileButton(profileId, role) {
@@ -920,7 +990,12 @@ document.querySelector("#delete-project").addEventListener("click", deleteProjec
 projectSearchEl.addEventListener("input", renderProjectList);
 projectSortEl.addEventListener("change", renderProjectList);
 requirementsEl.addEventListener("input", updateStartButton);
-requirementsFileEl.addEventListener("change", updateStartButton);
+for (const group of uploadFileGroups) {
+  group.input.addEventListener(
+    "change",
+    () => addSelectedFiles(group.input, group.list)
+  );
+}
 startButton.addEventListener("click", startProject);
 
 updateStartButton();

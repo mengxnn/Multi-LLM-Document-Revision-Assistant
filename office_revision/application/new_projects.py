@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import shutil
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -36,6 +36,26 @@ from .model_profiles import load_active_role_settings
 ProgressCallback = Callable[[ProgressEvent], None]
 
 
+@dataclass(frozen=True)
+class _InputDocument:
+    path: Path
+    text: str
+    used_ocr: bool
+
+
+@dataclass(frozen=True)
+class _InputCollection:
+    text: str
+    manual_text: str
+    documents: tuple[_InputDocument, ...]
+
+    @property
+    def reference_path(self) -> Path | None:
+        if self.manual_text or len(self.documents) != 1:
+            return None
+        return self.documents[0].path
+
+
 class NewProjectService:
     def __init__(
         self,
@@ -65,30 +85,37 @@ class NewProjectService:
             on_progress, stage, message, cycle, total, elapsed_seconds
         )
         emit("reading_inputs", "读取输入文件")
-        requirements, _, requirements_ocr = self._read_value(
+        requirements_input = self._read_collection(
             request.requirements_path,
+            request.requirements_paths,
             request.requirements_text,
             "requirements",
             required=True,
             enable_ocr=request.enable_ocr,
             ocr_language=request.ocr_language,
         )
-        source_text, source_path, source_ocr = self._read_value(
+        source_input = self._read_collection(
             request.source_path,
+            request.source_paths,
             request.source_text,
             "source",
             required=False,
             enable_ocr=request.enable_ocr,
             ocr_language=request.ocr_language,
         )
-        meeting_notes, _, meeting_notes_ocr = self._read_value(
+        meeting_notes_input = self._read_collection(
             request.meeting_notes_path,
+            request.meeting_notes_paths,
             request.meeting_notes_text,
             "meeting notes",
             required=False,
             enable_ocr=request.enable_ocr,
             ocr_language=request.ocr_language,
         )
+        requirements = requirements_input.text
+        source_text = source_input.text
+        source_path = source_input.reference_path
+        meeting_notes = meeting_notes_input.text
 
         emit("creating_project", "创建项目并保存输入")
         initial_title = request.project_title or fallback_project_title(
@@ -101,15 +128,9 @@ class NewProjectService:
         )
         self._write_snapshots(
             context.inputs_dir,
-            requirements=requirements,
-            requirements_path=Path(request.requirements_path) if request.requirements_path else None,
-            source_text=source_text,
-            source_path=source_path,
-            source_ocr=source_ocr,
-            meeting_notes=meeting_notes,
-            meeting_notes_path=Path(request.meeting_notes_path) if request.meeting_notes_path else None,
-            requirements_ocr=requirements_ocr,
-            meeting_notes_ocr=meeting_notes_ocr,
+            requirements=requirements_input,
+            source=source_input,
+            meeting_notes=meeting_notes_input,
         )
         write_project_metadata(context)
         ensure_feedback_template(context.inputs_dir)
@@ -123,7 +144,11 @@ class NewProjectService:
             cycles=request.cycles,
             title=initial_title,
             source_path=str(source_path) if source_path else None,
-            meeting_notes_path=str(request.meeting_notes_path) if request.meeting_notes_path else None,
+            meeting_notes_path=(
+                str(meeting_notes_input.reference_path)
+                if meeting_notes_input.reference_path
+                else None
+            ),
         )
 
         def workflow_progress(
@@ -246,86 +271,162 @@ class NewProjectService:
         if callback:
             callback(ProgressEvent(stage, message, cycle, total, elapsed_seconds))
 
-    @staticmethod
-    def _validate_request(request: StartProjectRequest) -> None:
-        for label, path, text in (
-            ("requirements", request.requirements_path, request.requirements_text),
-            ("source", request.source_path, request.source_text),
-            ("meeting notes", request.meeting_notes_path, request.meeting_notes_text),
-        ):
-            if path is not None and text is not None and text.strip():
-                raise RevisionApplicationError(f"{label} path and text cannot both be provided")
+    def _validate_request(self, request: StartProjectRequest) -> None:
         if request.cycles <= 0:
             raise RevisionApplicationError("cycles must be greater than 0")
         if request.summary_mode not in {"rule", "llm"}:
             raise RevisionApplicationError("summary_mode must be rule or llm")
         if request.project_title_language not in {"auto", "zh", "en"}:
             raise RevisionApplicationError("project_title_language must be auto, zh, or en")
-        if request.source_path and Path(request.source_path).suffix.lower() not in {".docx", ".md", ".pdf", ".txt"}:
-            raise RevisionApplicationError("source must be a .docx, .md, .pdf, or .txt file")
+        for label, paths in (
+            (
+                "requirements",
+                self._request_paths(
+                    request.requirements_path,
+                    request.requirements_paths,
+                ),
+            ),
+            ("source", self._request_paths(request.source_path, request.source_paths)),
+            (
+                "meeting notes",
+                self._request_paths(request.meeting_notes_path, request.meeting_notes_paths),
+            ),
+        ):
+            for path in paths:
+                if path.suffix.lower() not in {".docx", ".md", ".pdf", ".txt"}:
+                    raise RevisionApplicationError(
+                        f"{label} must be a .docx, .md, .pdf, or .txt file"
+                    )
 
-    def _read_value(self, path, text, label, *, required, enable_ocr=False, ocr_language="chi_sim+eng"):
-        if path is not None:
-            path = Path(path)
-            if not path.exists():
-                raise RevisionApplicationError(f"{label} file not found: {path}")
-            used_ocr = False
-            try:
-                value = read_source_text(path).strip()
-            except ValueError as exc:
-                if enable_ocr and path.suffix.lower() == ".pdf":
-                    try:
-                        value = self.ocr_reader(path, ocr_language).strip()
-                    except Exception as ocr_exc:
-                        raise RevisionApplicationError(
-                            f"{label} file cannot be read with OCR: {ocr_exc}"
-                        ) from ocr_exc
-                    used_ocr = True
-                else:
-                    raise RevisionApplicationError(f"{label} file cannot be read: {exc}") from exc
-            resolved_path = path
+    def _read_collection(
+        self,
+        path,
+        paths,
+        text,
+        label,
+        *,
+        required,
+        enable_ocr=False,
+        ocr_language="chi_sim+eng",
+    ) -> _InputCollection:
+        manual_text = (text or "").strip()
+        documents = tuple(
+            self._read_document(
+                item,
+                label=label,
+                enable_ocr=enable_ocr,
+                ocr_language=ocr_language,
+            )
+            for item in self._request_paths(path, paths)
+        )
+        sections: list[tuple[str, str]] = []
+        if manual_text:
+            sections.append(("手动输入", manual_text))
+        sections.extend((document.path.name, document.text) for document in documents)
+        if not sections:
+            combined = ""
+        elif len(sections) == 1:
+            combined = sections[0][1]
         else:
-            value = (text or "").strip()
-            resolved_path = None
-            used_ocr = False
-        if required and not value:
+            combined = "\n\n".join(
+                f"## {name}\n\n{content}"
+                for name, content in sections
+            )
+        if required and not combined:
             raise RevisionApplicationError(f"{label} is required and cannot be empty")
-        return value, resolved_path, used_ocr
+        return _InputCollection(
+            text=combined,
+            manual_text=manual_text,
+            documents=documents,
+        )
+
+    def _read_document(
+        self,
+        path,
+        *,
+        label,
+        enable_ocr,
+        ocr_language,
+    ) -> _InputDocument:
+        path = Path(path)
+        if not path.exists():
+            raise RevisionApplicationError(f"{label} file not found: {path}")
+        used_ocr = False
+        try:
+            value = read_source_text(path).strip()
+        except ValueError as exc:
+            if enable_ocr and path.suffix.lower() == ".pdf":
+                try:
+                    value = self.ocr_reader(path, ocr_language).strip()
+                except Exception as ocr_exc:
+                    raise RevisionApplicationError(
+                        f"{label} file cannot be read with OCR: {ocr_exc}"
+                    ) from ocr_exc
+                used_ocr = True
+            else:
+                raise RevisionApplicationError(
+                    f"{label} file cannot be read: {exc}"
+                ) from exc
+        return _InputDocument(path=path, text=value, used_ocr=used_ocr)
+
+    @staticmethod
+    def _request_paths(path, paths) -> tuple[Path, ...]:
+        values = ([path] if path is not None else []) + list(paths or ())
+        unique: list[Path] = []
+        seen: set[str] = set()
+        for value in values:
+            candidate = Path(value)
+            key = str(candidate.resolve()).lower()
+            if key not in seen:
+                seen.add(key)
+                unique.append(candidate)
+        return tuple(unique)
 
     @staticmethod
     def _write_snapshots(
         inputs_dir,
         *,
         requirements,
-        requirements_path,
-        requirements_ocr,
-        source_text,
-        source_path,
-        source_ocr,
+        source,
         meeting_notes,
-        meeting_notes_path,
-        meeting_notes_ocr,
     ):
         inputs_dir.mkdir(parents=True, exist_ok=True)
-        (inputs_dir / "requirements.md").write_text(requirements, encoding="utf-8")
-        if requirements_path and requirements_path.suffix.lower() == ".pdf":
-            shutil.copy2(requirements_path, inputs_dir / "requirements.pdf")
-            if requirements_ocr:
-                (inputs_dir / "requirements_ocr.md").write_text(requirements, encoding="utf-8")
-        if source_text:
-            if source_path:
-                shutil.copy2(source_path, inputs_dir / f"source{source_path.suffix.lower()}")
-                if source_path.suffix.lower() == ".pdf":
-                    name = "source_ocr.md" if source_ocr else "source_extracted.md"
-                    (inputs_dir / name).write_text(source_text, encoding="utf-8")
+        NewProjectService._write_input_collection(inputs_dir, "requirements", requirements)
+        NewProjectService._write_input_collection(inputs_dir, "source", source)
+        NewProjectService._write_input_collection(inputs_dir, "meeting_notes", meeting_notes)
+
+    @staticmethod
+    def _write_input_collection(
+        inputs_dir: Path,
+        role: str,
+        collection: _InputCollection,
+    ) -> None:
+        if not collection.text:
+            return
+        canonical = inputs_dir / f"{role}.md"
+        canonical.write_text(collection.text, encoding="utf-8")
+        legacy_layout = not collection.manual_text and len(collection.documents) == 1
+        for index, document in enumerate(collection.documents, start=1):
+            if legacy_layout:
+                original = inputs_dir / f"{role}{document.path.suffix.lower()}"
             else:
-                (inputs_dir / "source.md").write_text(source_text, encoding="utf-8")
-        if meeting_notes:
-            (inputs_dir / "meeting_notes.md").write_text(meeting_notes, encoding="utf-8")
-            if meeting_notes_path and meeting_notes_path.suffix.lower() == ".pdf":
-                shutil.copy2(meeting_notes_path, inputs_dir / "meeting_notes.pdf")
-                if meeting_notes_ocr:
-                    (inputs_dir / "meeting_notes_ocr.md").write_text(meeting_notes, encoding="utf-8")
+                original = inputs_dir / (
+                    f"{role}_{index:02d}_{Path(document.path.name).name}"
+                )
+            if original != canonical:
+                shutil.copy2(document.path, original)
+            if document.path.suffix.lower() != ".pdf":
+                continue
+            if legacy_layout:
+                if role == "requirements" and not document.used_ocr:
+                    continue
+                extracted_name = (
+                    f"{role}_ocr.md" if document.used_ocr else f"{role}_extracted.md"
+                )
+            else:
+                suffix = "_ocr.md" if document.used_ocr else "_extracted.md"
+                extracted_name = f"{original.stem}{suffix}"
+            (inputs_dir / extracted_name).write_text(document.text, encoding="utf-8")
 
     @staticmethod
     def _cleanup_failed_project(context) -> None:

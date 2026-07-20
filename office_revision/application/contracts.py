@@ -142,10 +142,13 @@ class RevisionApplicationError(Exception):
 @dataclass(frozen=True)
 class StartProjectRequest:
     requirements_path: str | Path | None = None
+    requirements_paths: tuple[str | Path, ...] = ()
     requirements_text: str | None = None
     source_path: str | Path | None = None
+    source_paths: tuple[str | Path, ...] = ()
     source_text: str | None = None
     meeting_notes_path: str | Path | None = None
+    meeting_notes_paths: tuple[str | Path, ...] = ()
     meeting_notes_text: str | None = None
     project_title: str | None = None
     project_title_language: str = "auto"

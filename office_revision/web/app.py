@@ -117,23 +117,23 @@ def create_app(
         dry_run: bool = Form(default=False),
         enable_ocr: bool = Form(default=False),
         summary_mode: str = Form(default="rule"),
-        requirements_file: UploadFile | None = File(default=None),
-        source_file: UploadFile | None = File(default=None),
-        meeting_notes_file: UploadFile | None = File(default=None),
+        requirements_file: list[UploadFile] | None = File(default=None),
+        source_file: list[UploadFile] | None = File(default=None),
+        meeting_notes_file: list[UploadFile] | None = File(default=None),
     ) -> dict[str, str]:
         upload_dir = safe_projects_root / ".uploads" / uuid.uuid4().hex
         try:
-            requirements_path = _save_upload_file(
+            requirement_paths = _save_upload_files(
                 requirements_file,
                 upload_dir=upload_dir,
                 field_name="requirements_file",
             )
-            source_path = _save_upload_file(
+            source_paths = _save_upload_files(
                 source_file,
                 upload_dir=upload_dir,
                 field_name="source_file",
             )
-            meeting_notes_path = _save_upload_file(
+            meeting_note_paths = _save_upload_files(
                 meeting_notes_file,
                 upload_dir=upload_dir,
                 field_name="meeting_notes_file",
@@ -142,20 +142,30 @@ def create_app(
             _cleanup_upload_dir(upload_dir)
             raise
         requirements_text = _optional_string(requirements_text)
-        if not requirements_text and not requirements_path:
+        if not requirements_text and not requirement_paths:
             _cleanup_upload_dir(upload_dir)
             raise HTTPException(
                 status_code=400,
                 detail="requirements_text or requirements_file is required",
             )
+        requirements_path, requirements_paths = _single_and_multiple_paths(
+            requirement_paths
+        )
+        source_path, source_paths = _single_and_multiple_paths(source_paths)
+        meeting_notes_path, meeting_notes_paths = _single_and_multiple_paths(
+            meeting_note_paths
+        )
 
         request = StartProjectRequest(
-            requirements_text=None if requirements_path else requirements_text,
+            requirements_text=requirements_text,
             requirements_path=requirements_path,
-            source_text=None if source_path else _optional_string(source_text),
+            requirements_paths=requirements_paths,
+            source_text=_optional_string(source_text),
             source_path=source_path,
-            meeting_notes_text=None if meeting_notes_path else _optional_string(meeting_notes_text),
+            source_paths=source_paths,
+            meeting_notes_text=_optional_string(meeting_notes_text),
             meeting_notes_path=meeting_notes_path,
+            meeting_notes_paths=meeting_notes_paths,
             project_title=_optional_string(project_title),
             cycles=cycles,
             dry_run=dry_run,
@@ -383,27 +393,50 @@ def _run_worker(
         executor.submit(worker)
 
 
-def _save_upload_file(
-    upload: UploadFile | None,
+def _save_upload_files(
+    uploads: list[UploadFile] | None,
     *,
     upload_dir: Path,
     field_name: str,
-) -> str | None:
-    if upload is None or not upload.filename:
-        return None
-    filename = Path(upload.filename).name
-    suffix = Path(filename).suffix.lower()
-    if suffix not in {".docx", ".md", ".pdf", ".txt"}:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{field_name} must be a .docx, .md, .pdf, or .txt file",
-        )
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = _safe_upload_name(filename, fallback=f"upload{suffix}")
-    target = upload_dir / f"{field_name}-{safe_name}"
-    with target.open("wb") as output:
-        shutil.copyfileobj(upload.file, output)
-    return str(target)
+) -> tuple[str, ...]:
+    saved: list[str] = []
+    target_dir = upload_dir / field_name
+    for upload in uploads or ():
+        if not upload.filename:
+            continue
+        filename = Path(upload.filename).name
+        suffix = Path(filename).suffix.lower()
+        if suffix not in {".docx", ".md", ".pdf", ".txt"}:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{field_name} must be a .docx, .md, .pdf, or .txt file",
+            )
+        target_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = _safe_upload_name(filename, fallback=f"upload{suffix}")
+        target = _unique_upload_target(target_dir / safe_name)
+        with target.open("wb") as output:
+            shutil.copyfileobj(upload.file, output)
+        saved.append(str(target))
+    return tuple(saved)
+
+
+def _unique_upload_target(path: Path) -> Path:
+    if not path.exists():
+        return path
+    index = 2
+    while True:
+        candidate = path.with_name(f"{path.stem}-{index}{path.suffix}")
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def _single_and_multiple_paths(
+    paths: tuple[str, ...],
+) -> tuple[str | None, tuple[str, ...]]:
+    if len(paths) == 1:
+        return paths[0], ()
+    return None, paths
 
 
 def _safe_upload_name(filename: str, *, fallback: str) -> str:

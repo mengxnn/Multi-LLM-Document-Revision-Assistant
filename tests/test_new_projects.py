@@ -50,6 +50,77 @@ def write_blank_pdf(path: Path) -> None:
 
 
 class NewProjectTests(unittest.TestCase):
+    def test_new_project_combines_multiple_requirement_files_with_pasted_text(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "format.md"
+            second = root / "policy.txt"
+            first.write_text("Use a formal structure.", encoding="utf-8")
+            second.write_text("Keep all factual details.", encoding="utf-8")
+
+            result = RevisionApplication(projects_root=root / "projects").start_new_project(
+                StartProjectRequest(
+                    requirements_text="Produce a concise revision.",
+                    requirements_paths=(first, second),
+                    cycles=1,
+                    dry_run=True,
+                )
+            )
+
+            combined = (result.project_path / "inputs" / "requirements.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertLess(
+                combined.index("Produce a concise revision."),
+                combined.index("format.md"),
+            )
+            self.assertLess(combined.index("format.md"), combined.index("policy.txt"))
+            originals = sorted(
+                path.name
+                for path in (result.project_path / "inputs").glob("requirements_*")
+                if path.suffix in {".md", ".txt"}
+            )
+            self.assertIn("requirements_01_format.md", originals)
+            self.assertIn("requirements_02_policy.txt", originals)
+
+    def test_new_project_combines_multiple_source_and_meeting_note_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_one = root / "chapter-one.md"
+            source_two = root / "chapter-two.txt"
+            notes_one = root / "meeting-a.md"
+            notes_two = root / "meeting-b.txt"
+            source_one.write_text("First source section.", encoding="utf-8")
+            source_two.write_text("Second source section.", encoding="utf-8")
+            notes_one.write_text("First meeting decision.", encoding="utf-8")
+            notes_two.write_text("Second meeting decision.", encoding="utf-8")
+
+            result = RevisionApplication(projects_root=root / "projects").start_new_project(
+                StartProjectRequest(
+                    requirements_text="Revise all supplied material.",
+                    source_paths=(source_one, source_two),
+                    meeting_notes_paths=(notes_one, notes_two),
+                    cycles=1,
+                    dry_run=True,
+                )
+            )
+
+            inputs_dir = result.project_path / "inputs"
+            combined_source = (inputs_dir / "source.md").read_text(encoding="utf-8")
+            combined_notes = (inputs_dir / "meeting_notes.md").read_text(encoding="utf-8")
+            self.assertLess(
+                combined_source.index("chapter-one.md"),
+                combined_source.index("chapter-two.txt"),
+            )
+            self.assertLess(
+                combined_notes.index("meeting-a.md"),
+                combined_notes.index("meeting-b.txt"),
+            )
+            self.assertTrue((inputs_dir / "source_01_chapter-one.md").exists())
+            self.assertTrue((inputs_dir / "source_02_chapter-two.txt").exists())
+            self.assertTrue((inputs_dir / "meeting_notes_01_meeting-a.md").exists())
+            self.assertTrue((inputs_dir / "meeting_notes_02_meeting-b.txt").exists())
+
     def test_uploaded_pdf_requirements_keeps_original_and_extracted_text(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -119,6 +190,47 @@ class NewProjectTests(unittest.TestCase):
                 (result.project_path / "inputs" / "source_ocr.md").read_text(encoding="utf-8"),
             )
             self.assertTrue((result.project_path / "inputs" / "source.pdf").exists())
+
+    def test_multiple_sources_use_ocr_only_for_image_only_pdf(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            text_source = root / "outline.md"
+            scanned_source = root / "appendix.pdf"
+            text_source.write_text("Readable outline.", encoding="utf-8")
+            write_blank_pdf(scanned_source)
+            calls = []
+            service = NewProjectService(
+                root / "projects",
+                ocr_reader=lambda path, language: calls.append((Path(path), language))
+                or "Scanned appendix.",
+            )
+
+            result = RevisionApplication(
+                projects_root=root / "projects",
+                new_project_service=service,
+            ).start_new_project(
+                StartProjectRequest(
+                    requirements_text="Combine all source material.",
+                    source_paths=(text_source, scanned_source),
+                    cycles=1,
+                    dry_run=True,
+                    enable_ocr=True,
+                )
+            )
+
+            inputs_dir = result.project_path / "inputs"
+            combined = (inputs_dir / "source.md").read_text(encoding="utf-8")
+            self.assertEqual(calls, [(scanned_source, "chi_sim+eng")])
+            self.assertLess(
+                combined.index("Readable outline."),
+                combined.index("Scanned appendix."),
+            )
+            self.assertTrue((inputs_dir / "source_01_outline.md").exists())
+            self.assertTrue((inputs_dir / "source_02_appendix.pdf").exists())
+            self.assertEqual(
+                (inputs_dir / "source_02_appendix_ocr.md").read_text(encoding="utf-8"),
+                "Scanned appendix.",
+            )
 
     def test_uploaded_pdf_source_keeps_original_and_extracted_text(self):
         with tempfile.TemporaryDirectory() as temp_dir:
