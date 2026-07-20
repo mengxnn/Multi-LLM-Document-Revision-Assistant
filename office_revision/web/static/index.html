@@ -48,10 +48,34 @@
             <h3>继续修改</h3>
             <label for="continue-feedback-text">反馈意见</label>
             <textarea id="continue-feedback-text" rows="4" placeholder="输入本轮继续修改的反馈"></textarea>
+            <fieldset class="continue-context-options">
+              <legend>保留新建项目材料</legend>
+              <label class="check">
+                <input id="continue-retain-requirements" type="checkbox" checked>
+                修改要求
+                <span id="continue-requirements-chars" class="context-char-count">0 字符</span>
+              </label>
+              <label class="check">
+                <input id="continue-retain-source" type="checkbox">
+                初稿
+                <span id="continue-source-chars" class="context-char-count">0 字符</span>
+              </label>
+              <label class="check">
+                <input id="continue-retain-meeting-notes" type="checkbox">
+                会议纪要
+                <span id="continue-meeting-notes-chars" class="context-char-count">0 字符</span>
+              </label>
+            </fieldset>
+            <div class="file-field continue-supplemental-files">
+              <label for="continue-supplemental-file">本轮补充文件（docx/md/pdf/txt，可多选）</label>
+              <input id="continue-supplemental-file" type="file" accept=".docx,.md,.pdf,.txt" multiple>
+              <ul id="continue-supplemental-file-list" class="selected-file-list" aria-live="polite"></ul>
+            </div>
             <div class="form-row">
               <label for="continue-cycles">轮数</label>
               <input id="continue-cycles" type="number" min="1" value="2">
               <label class="check"><input id="continue-dry-run" type="checkbox"> dry-run</label>
+              <label class="check"><input id="continue-enable-ocr" type="checkbox"> 补充文件启用 OCR</label>
             </div>
             <button id="continue-project" type="button">继续修改</button>
 

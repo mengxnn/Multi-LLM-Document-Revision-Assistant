@@ -169,6 +169,12 @@ class ContinueRevisionRequest:
     base_version_path: str | Path | None = None
     feedback_path: str | Path | None = None
     feedback_text: str | None = None
+    supplemental_paths: tuple[str | Path, ...] = ()
+    retain_original_requirements: bool = True
+    retain_original_source: bool = False
+    retain_original_meeting_notes: bool = False
+    enable_ocr: bool = False
+    ocr_language: str = "chi_sim+eng"
     cycles: int = 2
     dry_run: bool = False
     summary_mode: str = "rule"

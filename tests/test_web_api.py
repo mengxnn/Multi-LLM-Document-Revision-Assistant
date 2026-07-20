@@ -567,7 +567,10 @@ class WebApiEndpointTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(Path(fake_app.received_start_request.requirements_path).suffix, ".md")
+        self.assertEqual(
+            Path(fake_app.received_start_request.requirements_path).name,
+            "修改要求.md",
+        )
 
     def test_start_project_upload_endpoint_keeps_same_named_fields_separate(self):
         fake_app = FakeWebApplication()
@@ -652,6 +655,54 @@ class WebApiEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(fake_app.received_continue_request.project_id, "demo_20260627")
         self.assertEqual(fake_app.received_continue_request.base_version_path, base_path)
+
+    def test_continue_upload_endpoint_accepts_context_switches_and_multiple_files(self):
+        fake_app = FakeWebApplication()
+        with TemporaryDirectory() as temp_dir:
+            client = TestClient(
+                create_app(
+                    application=fake_app,
+                    run_store=InMemoryRunStore(),
+                    run_synchronously=True,
+                    projects_root=Path(temp_dir) / "projects",
+                )
+            )
+
+            response = client.post(
+                "/api/projects/demo_20260627/continue-upload",
+                data={
+                    "feedback_text": "Use the supplemental material.",
+                    "base_version_path": "outputs/100000-pending-v1",
+                    "retain_original_requirements": "false",
+                    "retain_original_source": "true",
+                    "retain_original_meeting_notes": "true",
+                    "enable_ocr": "true",
+                    "cycles": "1",
+                    "dry_run": "true",
+                },
+                files=[
+                    (
+                        "supplemental_file",
+                        ("data.md", b"New data.", "text/markdown"),
+                    ),
+                    (
+                        "supplemental_file",
+                        ("decision.txt", b"New decision.", "text/plain"),
+                    ),
+                ],
+            )
+
+        self.assertEqual(response.status_code, 200)
+        request = fake_app.received_continue_request
+        self.assertEqual(request.feedback_text, "Use the supplemental material.")
+        self.assertFalse(request.retain_original_requirements)
+        self.assertTrue(request.retain_original_source)
+        self.assertTrue(request.retain_original_meeting_notes)
+        self.assertTrue(request.enable_ocr)
+        self.assertEqual(
+            [Path(path).name for path in request.supplemental_paths],
+            ["data.md", "decision.txt"],
+        )
 
     def test_decision_endpoint(self):
         fake_app = FakeWebApplication()

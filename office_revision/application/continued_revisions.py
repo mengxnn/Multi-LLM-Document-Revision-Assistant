@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
+import shutil
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -20,6 +21,7 @@ from ..continue_flow import (
 )
 from ..document_io import read_source_text
 from ..dry_run import dry_run_reviewer, dry_run_writer
+from ..ocr import read_pdf_text_with_ocr
 from ..project_manager import write_latest_metadata, write_session_status
 from ..project_paths import VersionLayout
 from ..revision_outputs import build_summary_generation, prepare_output_dir, write_outputs
@@ -37,6 +39,13 @@ from .model_profiles import load_active_role_settings
 ProgressCallback = Callable[[ProgressEvent], None]
 
 
+@dataclass(frozen=True)
+class _SupplementalDocument:
+    path: Path
+    text: str
+    used_ocr: bool
+
+
 class ContinuedRevisionService:
     def __init__(
         self,
@@ -46,12 +55,14 @@ class ContinuedRevisionService:
         model_profiles_path: str | Path = "config/model_profiles.json",
         real_runner=None,
         feedback_analyzer=None,
+        ocr_reader=None,
     ) -> None:
         self.projects_root = Path(projects_root)
         self.config_path = Path(config_path)
         self.model_profiles_path = Path(model_profiles_path)
         self.real_runner = real_runner or run_autogen_revision_loop
         self.feedback_analyzer = feedback_analyzer or generate_llm_feedback_analysis
+        self.ocr_reader = ocr_reader or read_pdf_text_with_ocr
 
     def continue_existing_revision(
         self,
@@ -85,13 +96,20 @@ class ContinuedRevisionService:
         feedback = self._read_feedback(request, feedback_path)
         self._write_feedback_snapshot(feedback_path, feedback)
 
-        requirements_path = find_project_requirements_path(project_dir / "inputs")
-        original_requirements = requirements_path.read_text(encoding="utf-8").strip()
-        if not original_requirements:
-            raise RevisionApplicationError(
-                f"requirements file is empty: {requirements_path}",
-                stage="reading_inputs",
-            )
+        inputs_dir = project_dir / "inputs"
+        original_requirements = self._read_original_requirements(
+            inputs_dir,
+            retain=request.retain_original_requirements,
+        )
+        original_source = self._read_optional_project_input(
+            inputs_dir / "source.md",
+            retain=request.retain_original_source,
+        )
+        original_meeting_notes = self._read_optional_project_input(
+            inputs_dir / "meeting_notes.md",
+            retain=request.retain_original_meeting_notes,
+        )
+        supplemental_documents = self._read_supplemental_documents(request)
 
         writer_settings, reviewer_settings = self._settings(request)
 
@@ -108,9 +126,15 @@ class ContinuedRevisionService:
             feedback=feedback,
             feedback_analysis=feedback_analysis,
         )
+        source_context = self._build_source_context(
+            previous_text,
+            original_source=original_source,
+            supplemental_documents=supplemental_documents,
+        )
         workflow_request = RevisionRequest(
-            source_text=previous_text,
+            source_text=source_context,
             requirements=requirements,
+            meeting_notes=original_meeting_notes,
             cycles=request.cycles,
             title=project_dir.name,
             source_path=str(previous_final_path),
@@ -174,6 +198,20 @@ class ContinuedRevisionService:
             "previous_output_dir": str(previous_output_dir),
             "previous_version": previous_version,
             "current_version": current_version,
+            "context_selection": {
+                "retain_original_requirements": request.retain_original_requirements,
+                "retain_original_source": request.retain_original_source,
+                "retain_original_meeting_notes": request.retain_original_meeting_notes,
+                "original_requirements_chars": len(original_requirements),
+                "original_source_chars": len(original_source),
+                "original_meeting_notes_chars": len(original_meeting_notes),
+                "supplemental_files": [
+                    document.path.name for document in supplemental_documents
+                ],
+                "supplemental_chars": sum(
+                    len(document.text) for document in supplemental_documents
+                ),
+            },
         }
 
         emit("generating_final_review", "生成最终人工复核报告")
@@ -188,6 +226,10 @@ class ContinuedRevisionService:
             mode=mode,
             status="continue",
             parent_version=previous_version,
+        )
+        self._write_supplemental_snapshots(
+            current_version_dir,
+            supplemental_documents,
         )
         write_session_status(current_version_dir, status="continue", current_version=current_version)
 
@@ -204,6 +246,10 @@ class ContinuedRevisionService:
                 mode=mode,
                 status="continue",
                 parent_version=previous_version,
+            )
+            self._write_supplemental_snapshots(
+                latest_dir,
+                supplemental_documents,
             )
             write_session_status(latest_dir, status="continue", current_version=current_version)
             latest_path = latest_dir
@@ -260,6 +306,112 @@ class ContinuedRevisionService:
         if path.suffix.lower() == ".docx":
             return read_source_text(path).strip()
         return path.read_text(encoding="utf-8").strip()
+
+    @staticmethod
+    def _read_original_requirements(inputs_dir: Path, *, retain: bool) -> str:
+        if not retain:
+            return ""
+        try:
+            requirements_path = find_project_requirements_path(inputs_dir)
+        except SystemExit as exc:
+            raise RevisionApplicationError(str(exc), stage="reading_inputs") from exc
+        value = requirements_path.read_text(encoding="utf-8").strip()
+        if not value:
+            raise RevisionApplicationError(
+                f"requirements file is empty: {requirements_path}",
+                stage="reading_inputs",
+            )
+        return value
+
+    @staticmethod
+    def _read_optional_project_input(path: Path, *, retain: bool) -> str:
+        if not retain or not path.exists():
+            return ""
+        return path.read_text(encoding="utf-8").strip()
+
+    def _read_supplemental_documents(
+        self,
+        request: ContinueRevisionRequest,
+    ) -> tuple[_SupplementalDocument, ...]:
+        documents = []
+        for value in request.supplemental_paths:
+            path = Path(value)
+            if not path.exists():
+                raise RevisionApplicationError(
+                    f"supplemental file not found: {path}",
+                    stage="reading_inputs",
+                )
+            used_ocr = False
+            try:
+                text = read_source_text(path).strip()
+            except ValueError as exc:
+                if request.enable_ocr and path.suffix.lower() == ".pdf":
+                    try:
+                        text = self.ocr_reader(path, request.ocr_language).strip()
+                    except Exception as ocr_exc:
+                        raise RevisionApplicationError(
+                            f"supplemental file cannot be read with OCR: {ocr_exc}",
+                            stage="reading_inputs",
+                        ) from ocr_exc
+                    used_ocr = True
+                else:
+                    raise RevisionApplicationError(
+                        f"supplemental file cannot be read: {exc}",
+                        stage="reading_inputs",
+                    ) from exc
+            documents.append(
+                _SupplementalDocument(
+                    path=path,
+                    text=text,
+                    used_ocr=used_ocr,
+                )
+            )
+        return tuple(documents)
+
+    @staticmethod
+    def _build_source_context(
+        previous_text: str,
+        *,
+        original_source: str,
+        supplemental_documents: tuple[_SupplementalDocument, ...],
+    ) -> str:
+        if not original_source and not supplemental_documents:
+            return previous_text
+        sections = [("# 所选基准版本", previous_text)]
+        if original_source:
+            sections.append(("# 新建项目时的初稿", original_source))
+        sections.extend(
+            (f"# 本轮补充文件：{document.path.name}", document.text)
+            for document in supplemental_documents
+        )
+        return "\n\n".join(f"{title}\n\n{text}" for title, text in sections)
+
+    @staticmethod
+    def _write_supplemental_snapshots(
+        version_dir: Path,
+        documents: tuple[_SupplementalDocument, ...],
+    ) -> None:
+        if not documents:
+            return
+        inputs_dir = version_dir / "inputs"
+        inputs_dir.mkdir(parents=True, exist_ok=True)
+        combined = []
+        for index, document in enumerate(documents, start=1):
+            target = inputs_dir / (
+                f"supplemental_{index:02d}_{document.path.name}"
+            )
+            shutil.copy2(document.path, target)
+            combined.append(f"## {document.path.name}\n\n{document.text}")
+            if document.path.suffix.lower() == ".pdf":
+                suffix = "_ocr.md" if document.used_ocr else "_extracted.md"
+                (inputs_dir / f"{target.stem}{suffix}").write_text(
+                    document.text,
+                    encoding="utf-8",
+                )
+        (inputs_dir / "supplemental.md").write_text(
+            "\n\n".join(combined),
+            encoding="utf-8",
+        )
 
     @staticmethod
     def _read_feedback(request: ContinueRevisionRequest, default_feedback_path: Path) -> str:
@@ -329,6 +481,11 @@ class ContinuedRevisionService:
             raise RevisionApplicationError("cycles must be greater than 0")
         if request.summary_mode not in {"rule", "llm"}:
             raise RevisionApplicationError("summary_mode must be rule or llm")
+        for path in request.supplemental_paths:
+            if Path(path).suffix.lower() not in {".docx", ".md", ".pdf", ".txt"}:
+                raise RevisionApplicationError(
+                    "supplemental file must be a .docx, .md, .pdf, or .txt file"
+                )
 
     def _settings(self, request: ContinueRevisionRequest):
         writer = load_active_role_settings(

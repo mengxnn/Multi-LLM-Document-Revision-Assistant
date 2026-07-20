@@ -83,6 +83,32 @@ class WebStaticTests(TestCase):
         self.assertIn("continue-feedback-text", response.text)
         self.assertIn("continue-project", response.text)
         self.assertIn("delete-permanent", response.text)
+        self.assertIn(
+            'id="continue-retain-requirements" type="checkbox" checked',
+            response.text,
+        )
+        self.assertIn('id="continue-retain-source" type="checkbox"', response.text)
+        self.assertIn(
+            'id="continue-retain-meeting-notes" type="checkbox"',
+            response.text,
+        )
+        self.assertIn('id="continue-supplemental-file"', response.text)
+        self.assertIn('id="continue-supplemental-file-list"', response.text)
+        self.assertIn('id="continue-enable-ocr"', response.text)
+
+    def test_continue_javascript_submits_context_switches_and_supplemental_files(self):
+        client = TestClient(create_app())
+
+        response = client.get("/static/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("/continue-upload", response.text)
+        self.assertIn('"retain_original_requirements"', response.text)
+        self.assertIn('"retain_original_source"', response.text)
+        self.assertIn('"retain_original_meeting_notes"', response.text)
+        self.assertIn('"supplemental_file"', response.text)
+        self.assertIn("updateContinueContextCounts", response.text)
+        self.assertIn("clearSelectedFiles", response.text)
 
     def test_project_search_filters_loaded_projects_in_javascript(self):
         client = TestClient(create_app())

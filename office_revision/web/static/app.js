@@ -12,6 +12,8 @@ const requirementsEl = document.querySelector("#requirements-text");
 const requirementsFileEl = document.querySelector("#requirements-file");
 const sourceFileEl = document.querySelector("#source-file");
 const meetingNotesFileEl = document.querySelector("#meeting-notes-file");
+const continueSupplementalFileEl = document.querySelector("#continue-supplemental-file");
+const continueSupplementalFileListEl = document.querySelector("#continue-supplemental-file-list");
 const uploadFileGroups = [
   {
     input: requirementsFileEl,
@@ -24,6 +26,10 @@ const uploadFileGroups = [
   {
     input: meetingNotesFileEl,
     list: document.querySelector("#meeting-notes-file-list")
+  },
+  {
+    input: continueSupplementalFileEl,
+    list: continueSupplementalFileListEl
   }
 ];
 const selectedUploadFiles = new Map(
@@ -264,6 +270,7 @@ async function loadProjects() {
   selectedProjectId = null;
   selectedBaseVersionPath = null;
   selectedBaseVersionName = null;
+  clearSelectedFiles(continueSupplementalFileEl, continueSupplementalFileListEl);
   try {
     const payload = await requestJson("/api/projects");
     loadedProjects = payload.projects;
@@ -283,8 +290,10 @@ async function loadProjectDetail(projectId) {
     selectedProjectId = projectId;
     selectedBaseVersionPath = null;
     selectedBaseVersionName = null;
+    clearSelectedFiles(continueSupplementalFileEl, continueSupplementalFileListEl);
     projectActionsEl.hidden = false;
     renderProjectDetail(detail);
+    updateContinueContextCounts(detail);
     updateProjectDetailButtons();
   } catch (error) {
     projectDetailEl.textContent = error.message;
@@ -297,7 +306,38 @@ function clearProjectSelection() {
   selectedProjectId = null;
   selectedBaseVersionPath = null;
   selectedBaseVersionName = null;
+  clearSelectedFiles(continueSupplementalFileEl, continueSupplementalFileListEl);
   updateProjectDetailButtons();
+}
+
+function updateContinueContextCounts(detail) {
+  const summaries = detail?.input_summaries || {};
+  const options = [
+    {
+      name: "requirements.md",
+      checkbox: document.querySelector("#continue-retain-requirements"),
+      count: document.querySelector("#continue-requirements-chars"),
+      defaultChecked: true
+    },
+    {
+      name: "source.md",
+      checkbox: document.querySelector("#continue-retain-source"),
+      count: document.querySelector("#continue-source-chars"),
+      defaultChecked: false
+    },
+    {
+      name: "meeting_notes.md",
+      checkbox: document.querySelector("#continue-retain-meeting-notes"),
+      count: document.querySelector("#continue-meeting-notes-chars"),
+      defaultChecked: false
+    }
+  ];
+  for (const option of options) {
+    const chars = Number(summaries[option.name]?.extracted_chars || 0);
+    option.count.textContent = `${chars} 字符`;
+    option.checkbox.disabled = chars === 0;
+    option.checkbox.checked = chars > 0 && option.defaultChecked;
+  }
 }
 
 function updateProjectDetailButtons() {
@@ -520,16 +560,49 @@ async function continueProject() {
       setText(runStatusEl, "已取消继续修改");
       return;
     }
-    const payload = await requestJson(`/api/projects/${selectedProjectId}/continue`, {
+    const formData = new FormData();
+    formData.append(
+      "feedback_text",
+      document.querySelector("#continue-feedback-text").value
+    );
+    if (selectedBaseVersionPath) {
+      formData.append("base_version_path", selectedBaseVersionPath);
+    }
+    formData.append(
+      "retain_original_requirements",
+      document.querySelector("#continue-retain-requirements").checked ? "true" : "false"
+    );
+    formData.append(
+      "retain_original_source",
+      document.querySelector("#continue-retain-source").checked ? "true" : "false"
+    );
+    formData.append(
+      "retain_original_meeting_notes",
+      document.querySelector("#continue-retain-meeting-notes").checked ? "true" : "false"
+    );
+    formData.append(
+      "cycles",
+      String(Number(document.querySelector("#continue-cycles").value || 2))
+    );
+    formData.append(
+      "dry_run",
+      document.querySelector("#continue-dry-run").checked ? "true" : "false"
+    );
+    formData.append(
+      "enable_ocr",
+      document.querySelector("#continue-enable-ocr").checked ? "true" : "false"
+    );
+    for (const file of selectedFilesFor(continueSupplementalFileEl)) {
+      formData.append("supplemental_file", file);
+    }
+    const payload = await requestJson(
+      `/api/projects/${selectedProjectId}/continue-upload`,
+      {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        feedback_text: document.querySelector("#continue-feedback-text").value,
-        base_version_path: selectedBaseVersionPath,
-        cycles: Number(document.querySelector("#continue-cycles").value || 2),
-        dry_run: document.querySelector("#continue-dry-run").checked
-      })
-    });
+        body: formData
+      }
+    );
+    clearSelectedFiles(continueSupplementalFileEl, continueSupplementalFileListEl);
     setText(runStatusEl, "started");
     runEventsEl.innerHTML = "";
     pollRun(payload.run_id);
@@ -543,12 +616,20 @@ function buildContinuePreview() {
   const cycles = Number(document.querySelector("#continue-cycles").value || 2);
   const dryRun = document.querySelector("#continue-dry-run").checked;
   const baseVersion = selectedBaseVersionName || "最新版本";
+  const retainRequirements = document.querySelector("#continue-retain-requirements").checked;
+  const retainSource = document.querySelector("#continue-retain-source").checked;
+  const retainMeetingNotes = document.querySelector("#continue-retain-meeting-notes").checked;
+  const supplementalFiles = selectedFilesFor(continueSupplementalFileEl);
   return [
     "请确认本次继续修改设置：",
     "",
     `继续项目：${selectedProjectId || "未选择"}`,
     `基准版本：${baseVersion}`,
     `反馈内容：${feedback ? "已填写" : "未填写"}`,
+    `保留原始修改要求：${retainRequirements ? "是" : "否"}`,
+    `保留原始初稿：${retainSource ? "是" : "否"}`,
+    `保留原始会议纪要：${retainMeetingNotes ? "是" : "否"}`,
+    `本轮补充文件：${supplementalFiles.length} 个`,
     `运行模式：${dryRun ? "dry-run 测试" : "真实模型"}`,
     `循环次数：${cycles}`,
     `writer 配置：${activeWriterProfileEl.textContent || "未加载"}`,
@@ -652,6 +733,13 @@ function removeSelectedFile(fileElement, listElement, index) {
     fileElement,
     files.filter((_, fileIndex) => fileIndex !== index)
   );
+  renderSelectedFiles(fileElement, listElement);
+  updateStartButton();
+}
+
+function clearSelectedFiles(fileElement, listElement) {
+  selectedUploadFiles.set(fileElement, []);
+  fileElement.value = "";
   renderSelectedFiles(fileElement, listElement);
   updateStartButton();
 }

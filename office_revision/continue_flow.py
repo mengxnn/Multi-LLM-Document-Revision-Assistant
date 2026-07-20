@@ -185,10 +185,11 @@ def build_continue_requirements(
     feedback: str,
     feedback_analysis: str,
 ) -> str:
-    return "\n\n".join(
+    sections = []
+    if original_requirements.strip():
+        sections.extend(["# 原始修改要求", original_requirements.strip()])
+    sections.extend(
         [
-            "# 原始修改要求",
-            original_requirements.strip(),
             "# 用户本轮反馈",
             feedback.strip(),
             "# 反馈分析与整体重写指令",
@@ -200,6 +201,7 @@ def build_continue_requirements(
             ),
         ]
     )
+    return "\n\n".join(sections)
 
 
 def dry_run_feedback_analysis(feedback: str) -> str:

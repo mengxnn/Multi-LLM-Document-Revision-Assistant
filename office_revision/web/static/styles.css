@@ -227,6 +227,34 @@ input {
   align-items: end;
 }
 
+.continue-context-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.continue-context-options legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.continue-context-options .check {
+  margin: 0;
+}
+
+.context-char-count {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.continue-supplemental-files {
+  margin: 12px 0;
+}
+
 .upload-grid {
   display: grid;
   gap: 8px;
@@ -415,6 +443,10 @@ button.danger {
   }
 
   .upload-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .continue-context-options {
     grid-template-columns: 1fr;
   }
 

@@ -203,6 +203,17 @@ def create_app(
             base_version_path=_optional_string(payload.get("base_version_path")),
             feedback_text=_optional_string(payload.get("feedback_text")),
             feedback_path=_optional_string(payload.get("feedback_path")),
+            supplemental_paths=tuple(payload.get("supplemental_paths") or ()),
+            retain_original_requirements=_bool_value(
+                payload.get("retain_original_requirements", True)
+            ),
+            retain_original_source=_bool_value(
+                payload.get("retain_original_source")
+            ),
+            retain_original_meeting_notes=_bool_value(
+                payload.get("retain_original_meeting_notes")
+            ),
+            enable_ocr=_bool_value(payload.get("enable_ocr")),
             cycles=_int_value(payload.get("cycles"), default=2),
             dry_run=_bool_value(payload.get("dry_run")),
             summary_mode=str(payload.get("summary_mode") or "rule"),
@@ -221,6 +232,68 @@ def create_app(
                 runs.mark_failed(record.run_id, stage=exc.stage, message=str(exc))
             except Exception as exc:
                 runs.mark_failed(record.run_id, stage="unexpected", message=str(exc))
+
+        _run_worker(worker, executor=executor, run_synchronously=run_synchronously)
+        return {"run_id": record.run_id}
+
+    @app.post("/api/projects/{project_id}/continue-upload")
+    def continue_project_upload(
+        project_id: str,
+        feedback_text: str | None = Form(default=None),
+        base_version_path: str | None = Form(default=None),
+        retain_original_requirements: bool = Form(default=True),
+        retain_original_source: bool = Form(default=False),
+        retain_original_meeting_notes: bool = Form(default=False),
+        cycles: int = Form(default=2),
+        dry_run: bool = Form(default=False),
+        enable_ocr: bool = Form(default=False),
+        summary_mode: str = Form(default="rule"),
+        supplemental_file: list[UploadFile] | None = File(default=None),
+    ) -> dict[str, str]:
+        upload_dir = safe_projects_root / ".uploads" / uuid.uuid4().hex
+        try:
+            supplemental_paths = _save_upload_files(
+                supplemental_file,
+                upload_dir=upload_dir,
+                field_name="supplemental_file",
+            )
+        except HTTPException:
+            _cleanup_upload_dir(upload_dir)
+            raise
+        feedback = _optional_string(feedback_text)
+        if not feedback:
+            _cleanup_upload_dir(upload_dir)
+            raise HTTPException(status_code=400, detail="feedback_text is required")
+
+        request = ContinueRevisionRequest(
+            project_id=project_id,
+            base_version_path=_optional_string(base_version_path),
+            feedback_text=feedback,
+            supplemental_paths=supplemental_paths,
+            retain_original_requirements=retain_original_requirements,
+            retain_original_source=retain_original_source,
+            retain_original_meeting_notes=retain_original_meeting_notes,
+            enable_ocr=enable_ocr,
+            cycles=cycles,
+            dry_run=dry_run,
+            summary_mode=summary_mode,
+        )
+        record = runs.create_run(kind="continue_revision", project_id=project_id)
+
+        def worker() -> None:
+            runs.mark_running(record.run_id)
+            try:
+                result = revision_app.continue_existing_revision(
+                    request,
+                    on_progress=lambda event: runs.append_event(record.run_id, event),
+                )
+                runs.mark_completed(record.run_id, result)
+            except RevisionApplicationError as exc:
+                runs.mark_failed(record.run_id, stage=exc.stage, message=str(exc))
+            except Exception as exc:
+                runs.mark_failed(record.run_id, stage="unexpected", message=str(exc))
+            finally:
+                _cleanup_upload_dir(upload_dir)
 
         _run_worker(worker, executor=executor, run_synchronously=run_synchronously)
         return {"run_id": record.run_id}
@@ -443,7 +516,17 @@ def _safe_upload_name(filename: str, *, fallback: str) -> str:
     original = Path(filename).name
     suffix = Path(original).suffix.lower()
     stem = Path(original).stem
-    cleaned_stem = re.sub(r"[^A-Za-z0-9_.-]+", "-", stem).strip(".-_")
+    cleaned_stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "-", stem).strip(" .")
+    reserved_names = {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{index}" for index in range(1, 10)),
+        *(f"LPT{index}" for index in range(1, 10)),
+    }
+    if cleaned_stem.upper() in reserved_names:
+        cleaned_stem = f"_{cleaned_stem}"
     if cleaned_stem:
         return f"{cleaned_stem}{suffix}"
     return fallback
